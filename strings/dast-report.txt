@@ -1,0 +1,534 @@
+{
+  "remediations": [],
+  "version": "15.0.6",
+  "vulnerabilities": [
+    {
+      "description": "The `X-Content-Type-Options` header with the value `nosniff` ensures that user agents do not attempt to\nguess the format of the data being received. User Agents such as browsers, commonly attempt to guess\nwhat the resource type being requested is, through a process called MIME type sniffing.\n\nWithout this header being sent, the browser may misinterpret the data, leading to MIME confusion attacks.\nIf an attacker were able to upload files that are accessible by using a browser, they could upload files\nthat could be interpreted as HTML and execute Cross-Site Scripting (XSS) attacks.",
+      "details": {
+        "discovered_at": {
+          "name": "Discovered at",
+          "type": "text",
+          "value": "2024-05-15T12:44:02.419"
+        },
+        "urls": {
+          "items": [
+            {
+              "href": "https://greghub.com/dast/",
+              "type": "url"
+            }
+          ],
+          "name": "URLs",
+          "type": "list"
+        }
+      },
+      "evidence": {
+        "request": {
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "greghub.com"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "none"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/122.0.6261.94 Safari/537.36"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"122\", \"Not(A:Brand\";v=\"24\", \"HeadlessChrome\";v=\"122\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Linux\""
+            }
+          ],
+          "method": "GET",
+          "url": "https://greghub.com/dast/"
+        },
+        "response": {
+          "headers": [
+            {
+              "name": "Connection",
+              "value": "Keep-Alive"
+            },
+            {
+              "name": "Keep-Alive",
+              "value": "timeout=5, max=100"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=2592000, h3-29=\":443\"; ma=2592000, h3-Q050=\":443\"; ma=2592000, h3-Q046=\":443\"; ma=2592000, h3-Q043=\":443\"; ma=2592000, quic=\":443\"; ma=2592000; v=\"43,46\""
+            },
+            {
+              "name": "content-length",
+              "value": "597"
+            },
+            {
+              "name": "content-type",
+              "value": "text/html"
+            },
+            {
+              "name": "date",
+              "value": "Wed, 15 May 2024 12:44:00 GMT"
+            },
+            {
+              "name": "server",
+              "value": "LiteSpeed"
+            },
+            {
+              "name": "vary",
+              "value": "User-Agent"
+            }
+          ],
+          "reason_phrase": "Not Found",
+          "status_code": 404
+        },
+        "summary": "The X-Content-Type-Options header is missing or does not contain nosniff"
+      },
+      "id": "cec6c4e4-12b8-11ef-b44f-0242ac110003",
+      "identifiers": [
+        {
+          "name": "Missing X-Content-Type-Options: nosniff",
+          "type": "browserker",
+          "url": "https://docs.gitlab.com/ee/user/application_security/dast/checks/693.1.html",
+          "value": "693.1"
+        },
+        {
+          "name": "CWE-693",
+          "type": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/693.html",
+          "value": "693"
+        }
+      ],
+      "links": [
+        {
+          "name": "OWASP",
+          "url": "https://owasp.org/www-project-secure-headers/#x-content-type-options"
+        },
+        {
+          "name": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/693.html"
+        },
+        {
+          "name": "Mozilla Blog on MIME Confusion attacks",
+          "url": "https://blog.mozilla.org/security/2016/08/26/mitigating-mime-confusion-attacks-in-firefox/"
+        },
+        {
+          "name": "Mozilla MDN on X-Content-Type-Options",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options"
+        }
+      ],
+      "location": {
+        "hostname": "https://greghub.com",
+        "method": "",
+        "param": "",
+        "path": ""
+      },
+      "name": "Missing X-Content-Type-Options: nosniff",
+      "severity": "Low",
+      "solution": "We recommend that the header and value of `X-Content-Type-Options: nosniff` be set server wide.\nThis ensures any resources that are mistakenly missing a `Content-Type` value are not\nmisinterpreted."
+    },
+    {
+      "description": "The `Strict-Transport-Security` header was found to be missing or invalid. The `Strict-Transport-Security`\nheader allows web site operators to force communications to occur over a TLS connection. By enabling this\nheader, websites can protect their users from various forms of network eavesdropping or interception attacks.\nWhile most browsers prevent mixed-content (loading resources from HTTP when navigating from an HTTPS site),\nthis header also ensures that all resource requests are only ever initiated over a secure transport.",
+      "details": {
+        "discovered_at": {
+          "name": "Discovered at",
+          "type": "text",
+          "value": "2024-05-15T12:44:02.412"
+        },
+        "urls": {
+          "items": [
+            {
+              "href": "https://greghub.com/dast/",
+              "type": "url"
+            }
+          ],
+          "name": "URLs",
+          "type": "list"
+        }
+      },
+      "evidence": {
+        "request": {
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "greghub.com"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "none"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/122.0.6261.94 Safari/537.36"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"122\", \"Not(A:Brand\";v=\"24\", \"HeadlessChrome\";v=\"122\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Linux\""
+            }
+          ],
+          "method": "GET",
+          "url": "https://greghub.com/dast/"
+        },
+        "response": {
+          "headers": [
+            {
+              "name": "Connection",
+              "value": "Keep-Alive"
+            },
+            {
+              "name": "Keep-Alive",
+              "value": "timeout=5, max=100"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=2592000, h3-29=\":443\"; ma=2592000, h3-Q050=\":443\"; ma=2592000, h3-Q046=\":443\"; ma=2592000, h3-Q043=\":443\"; ma=2592000, quic=\":443\"; ma=2592000; v=\"43,46\""
+            },
+            {
+              "name": "content-length",
+              "value": "597"
+            },
+            {
+              "name": "content-type",
+              "value": "text/html"
+            },
+            {
+              "name": "date",
+              "value": "Wed, 15 May 2024 12:44:00 GMT"
+            },
+            {
+              "name": "server",
+              "value": "LiteSpeed"
+            },
+            {
+              "name": "vary",
+              "value": "User-Agent"
+            }
+          ],
+          "reason_phrase": "Not Found",
+          "status_code": 404
+        },
+        "summary": "The Strict-Transport-Security is missing or invalid"
+      },
+      "id": "cec5c31d-12b8-11ef-b44f-0242ac110003",
+      "identifiers": [
+        {
+          "name": "Strict-Transport-Security header missing or invalid",
+          "type": "browserker",
+          "url": "https://docs.gitlab.com/ee/user/application_security/dast/checks/16.7.html",
+          "value": "16.7"
+        },
+        {
+          "name": "CWE-16",
+          "type": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/16.html",
+          "value": "16"
+        }
+      ],
+      "links": [
+        {
+          "name": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/16.html"
+        },
+        {
+          "name": "Deployment Recommendations",
+          "url": "https://hstspreload.org/#deployment-recommendations"
+        },
+        {
+          "name": "OWASP",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html"
+        },
+        {
+          "name": "RFC",
+          "url": "https://datatracker.ietf.org/doc/html/rfc6797"
+        }
+      ],
+      "location": {
+        "hostname": "https://greghub.com",
+        "method": "",
+        "param": "",
+        "path": ""
+      },
+      "name": "Strict-Transport-Security header missing or invalid",
+      "severity": "Low",
+      "solution": "Only three directives are applicable for the `Strict-Transport-Security` header.\n\n1. `max-age`: This required directive specifies how long (in seconds) after receiving the response it should communicate only over a secure transport.\n1. `includeSubDomains`: This optional, valueless directive signals that the policy applies to this host as well as any subdomains found under this host's domain.\n1. `preload`: While not part of the specification, setting this optional value allows major browser organizations to add this site into the browser's preloaded set of HTTPS sites. This requires further action on behalf of the website operator to submit their domain to the browser's HSTS preload list. See [hstspreload.org](https://hstspreload.org/) for more information.\n\nNote that invalid directives, or the `Strict-Transport-Security` header appearing more than once (if the values are\ndifferent) is considered invalid.\n\nPrior to adding to this security configuration to your website, it is recommended you review the hstspreload.org [Deployment Recommendations](https://hstspreload.org/#deployment-recommendations)."
+    },
+    {
+      "description": "A missing or invalid `Content-Security-Policy` (CSP) was identified on the target site. CSP can aid in\nhardening a website against various client side attacks such as Cross-Site Scripting (XSS).",
+      "details": {
+        "discovered_at": {
+          "name": "Discovered at",
+          "type": "text",
+          "value": "2024-05-15T12:44:02.413"
+        },
+        "urls": {
+          "items": [
+            {
+              "href": "https://greghub.com/dast/",
+              "type": "url"
+            }
+          ],
+          "name": "URLs",
+          "type": "list"
+        }
+      },
+      "evidence": {
+        "request": {
+          "headers": [
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            },
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate, br"
+            },
+            {
+              "name": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "name": "Host",
+              "value": "greghub.com"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "none"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/122.0.6261.94 Safari/537.36"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Chromium\";v=\"122\", \"Not(A:Brand\";v=\"24\", \"HeadlessChrome\";v=\"122\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"Linux\""
+            }
+          ],
+          "method": "GET",
+          "url": "https://greghub.com/dast/"
+        },
+        "response": {
+          "headers": [
+            {
+              "name": "Connection",
+              "value": "Keep-Alive"
+            },
+            {
+              "name": "Keep-Alive",
+              "value": "timeout=5, max=100"
+            },
+            {
+              "name": "alt-svc",
+              "value": "h3=\":443\"; ma=2592000, h3-29=\":443\"; ma=2592000, h3-Q050=\":443\"; ma=2592000, h3-Q046=\":443\"; ma=2592000, h3-Q043=\":443\"; ma=2592000, quic=\":443\"; ma=2592000; v=\"43,46\""
+            },
+            {
+              "name": "content-length",
+              "value": "597"
+            },
+            {
+              "name": "content-type",
+              "value": "text/html"
+            },
+            {
+              "name": "date",
+              "value": "Wed, 15 May 2024 12:44:00 GMT"
+            },
+            {
+              "name": "server",
+              "value": "LiteSpeed"
+            },
+            {
+              "name": "vary",
+              "value": "User-Agent"
+            }
+          ],
+          "reason_phrase": "Not Found",
+          "status_code": 404
+        },
+        "summary": "Content-Security-Policy header is missing"
+      },
+      "id": "cec5e66b-12b8-11ef-b44f-0242ac110003",
+      "identifiers": [
+        {
+          "name": "Content-Security-Policy analysis",
+          "type": "browserker",
+          "url": "https://docs.gitlab.com/ee/user/application_security/dast/checks/16.8.html",
+          "value": "16.8"
+        },
+        {
+          "name": "CWE-16",
+          "type": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/16.html",
+          "value": "16"
+        }
+      ],
+      "links": [
+        {
+          "name": "CWE",
+          "url": "https://cwe.mitre.org/data/definitions/16.html"
+        },
+        {
+          "name": "OWASP",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html"
+        },
+        {
+          "name": "MDN",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP"
+        },
+        {
+          "name": "Content Security Policy Level 3",
+          "url": "https://www.w3.org/TR/CSP3/"
+        },
+        {
+          "name": "CSP Evaluator",
+          "url": "https://csp-evaluator.withgoogle.com/"
+        }
+      ],
+      "location": {
+        "hostname": "https://greghub.com",
+        "method": "",
+        "param": "",
+        "path": ""
+      },
+      "name": "Content-Security-Policy analysis",
+      "severity": "Info",
+      "solution": "If the target site is missing a CSP, please investigate the relevant URLs for enabling CSP. Otherwise,\nfollow the recommendations to determine if any actions are necessary."
+    }
+  ],
+  "scan": {
+    "analyzer": {
+      "id": "gitlab-dast",
+      "name": "GitLab DAST",
+      "vendor": {
+        "name": "GitLab"
+      },
+      "version": "4.0.31"
+    },
+    "end_time": "2024-05-15T12:44:04",
+    "messages": [],
+    "options": [
+      {
+        "name": "auth_url",
+        "value": false
+      },
+      {
+        "name": "full_scan",
+        "value": false
+      }
+    ],
+    "scanned_resources": [
+      {
+        "method": "GET",
+        "type": "url",
+        "url": "https://greghub.com/dast/"
+      }
+    ],
+    "scanner": {
+      "id": "zaproxy-browser-based-dast",
+      "name": "OWASP Zed Attack Proxy (ZAP) and Browser-based DAST",
+      "url": "https://www.zaproxy.org",
+      "version": "2.14.0",
+      "vendor": {
+        "name": "GitLab"
+      }
+    },
+    "start_time": "2024-05-15T12:43:48",
+    "status": "success",
+    "type": "dast"
+  }
+}
