@@ -1,0 +1,83 @@
+import requests
+from datetime import datetime
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com"  # Change for self-hosted GitLab
+PROJECT_ID = "your_project_id"  # Replace with your GitLab project ID
+ACCESS_TOKEN = "your_project_access_token"  # Replace with your token
+BRANCH_NAME = "main"  # Change if needed
+
+# GitLab API Endpoints
+COMMITS_URL = f"{GITLAB_URL}/api/v4/projects/{PROJECT_ID}/repository/commits"
+
+def get_last_commit():
+    """Fetches the latest commit from the repository."""
+    headers = {"Private-Token": ACCESS_TOKEN}
+    params = {"ref_name": BRANCH_NAME, "per_page": 1}  # Only get the latest commit
+    response = requests.get(COMMITS_URL, headers=headers, params=params)
+
+    return response.json()[0] if response.status_code == 200 and response.json() else None
+
+def get_commit_diff(commit_id):
+    """Fetches the file changes for the last commit."""
+    url = f"{COMMITS_URL}/{commit_id}/diff"
+    headers = {"Private-Token": ACCESS_TOKEN}
+    response = requests.get(url, headers=headers)
+
+    return response.json() if response.status_code == 200 else []
+
+def generate_html(commit, diffs):
+    """Generates a simple HTML file for the last commit."""
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>GitLab Release Notes - Latest Commit</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; padding: 20px; background-color: #f9f9f9; }}
+            .container {{ max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0px 0px 10px rgba(0,0,0,0.1); }}
+            h2, h3 {{ color: #333; }}
+            .commit-info, .file-changes {{ margin-bottom: 20px; }}
+            .file-list {{ padding-left: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>GitLab Release Notes - Latest Commit</h2>
+            <p><strong>Branch:</strong> {BRANCH_NAME}</p>
+            <p><strong>Date:</strong> {datetime.now().strftime('%Y-%m-%d')}</p>
+
+            <div class="commit-info">
+                <h3>Commit Details</h3>
+                <p><strong>Commit ID:</strong> {commit['id'][:8]}</p>
+                <p><strong>Author:</strong> {commit['author_name']}</p>
+                <p><strong>Date:</strong> {commit['created_at'][:10]}</p>
+                <p><strong>Message:</strong> {commit['message']}</p>
+            </div>
+
+            <div class="file-changes">
+                <h3>File Changes</h3>
+                <ul class="file-list">
+                    {"".join(f"<li>{diff['old_path']} → {diff['new_path']}</li>" for diff in diffs) if diffs else "<p>No file changes found.</p>"}
+                </ul>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    html_file = "gitlab_last_commit_release_notes.html"
+    with open(html_file, "w", encoding="utf-8") as file:
+        file.write(html_content)
+    
+    print(f"✅ Last commit release notes generated: {html_file}")
+
+if __name__ == "__main__":
+    commit = get_last_commit()
+    if commit:
+        diffs = get_commit_diff(commit['id'])
+        generate_html(commit, diffs)
+    else:
+        print("No commits found.")
