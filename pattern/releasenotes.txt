@@ -1,0 +1,89 @@
+import requests
+import json
+from datetime import datetime
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com"  # Change if using self-hosted GitLab
+PROJECT_ID = "your_project_id"  # Replace with your project ID
+ACCESS_TOKEN = "your_project_access_token"  # Replace with your token
+
+# GitLab API Endpoints
+COMMITS_URL = f"{GITLAB_URL}/api/v4/projects/{PROJECT_ID}/repository/commits"
+
+def get_commits():
+    """Fetches the latest commits from GitLab."""
+    headers = {"Private-Token": ACCESS_TOKEN}
+    response = requests.get(COMMITS_URL, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Error fetching commits:", response.text)
+        return []
+
+def get_commit_diff(commit_id):
+    """Fetches the file changes for a specific commit."""
+    url = f"{COMMITS_URL}/{commit_id}/diff"
+    headers = {"Private-Token": ACCESS_TOKEN}
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Error fetching diff for commit {commit_id}:", response.text)
+        return []
+
+def generate_html(commits):
+    """Generates an HTML report for the commits."""
+    html_content = f"""
+    <html>
+    <head>
+        <title>GitLab Release Notes</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; }}
+            .commit {{ margin-bottom: 20px; padding: 10px; border: 1px solid #ddd; }}
+            .commit h3 {{ margin: 5px 0; }}
+            .commit p {{ margin: 5px 0; }}
+            .files {{ margin-left: 20px; font-size: 14px; color: #555; }}
+        </style>
+    </head>
+    <body>
+        <h1>GitLab Release Notes - {datetime.now().strftime('%Y-%m-%d')}</h1>
+    """
+
+    for commit in commits:
+        commit_id = commit["id"]
+        author = commit["author_name"]
+        message = commit["message"]
+        short_id = commit["short_id"]
+        commit_url = f"{GITLAB_URL}/{PROJECT_ID}/-/commit/{commit_id}"
+        
+        # Fetch file changes
+        diffs = get_commit_diff(commit_id)
+        file_changes = "".join([f"<li>{diff['old_path']} → {diff['new_path']}</li>" for diff in diffs])
+
+        html_content += f"""
+        <div class='commit'>
+            <h3>Commit: <a href='{commit_url}'>{short_id}</a></h3>
+            <p><strong>Author:</strong> {author}</p>
+            <p><strong>Message:</strong> {message}</p>
+            <p><strong>File Changes:</strong></p>
+            <ul class='files'>{file_changes}</ul>
+        </div>
+        """
+
+    html_content += """
+    </body>
+    </html>
+    """
+
+    with open("gitlab_release_notes.html", "w", encoding="utf-8") as file:
+        file.write(html_content)
+    print("Release notes generated: gitlab_release_notes.html")
+
+if __name__ == "__main__":
+    commits = get_commits()
+    if commits:
+        generate_html(commits)
+    else:
+        print("No commits found.")
