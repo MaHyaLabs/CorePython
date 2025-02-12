@@ -1,0 +1,124 @@
+import requests
+import matplotlib.pyplot as plt
+import pandas as pd
+import datetime
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com/api/v4"
+GITLAB_PRIVATE_TOKEN = "your_private_token"
+GITLAB_PROJECT_ID = "your_project_id"
+HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
+
+def get_issues():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/issues"
+    response = requests.get(url, headers=HEADERS)
+    return response.json()
+
+def process_issues(issues):
+    data = []
+    for issue in issues:
+        created_at = datetime.datetime.strptime(issue['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        closed_at = None
+        if issue['state'] == 'closed' and issue.get('closed_at'):
+            closed_at = datetime.datetime.strptime(issue['closed_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        data.append({"title": issue['title'], "created_at": created_at, "closed_at": closed_at})
+    return pd.DataFrame(data)
+
+def plot_burndown_chart(df):
+    df = df.sort_values(by='created_at')
+    total_issues = len(df)
+    df['remaining'] = total_issues - df.index
+    
+    plt.figure(figsize=(10,5))
+    plt.plot(df['created_at'], df['remaining'], marker='o', label='Remaining Issues')
+    plt.xlabel('Date')
+    plt.ylabel('Issues Remaining')
+    plt.title('Burndown Chart')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.show()
+
+def plot_burnup_chart(df):
+    df['date'] = df['created_at'].dt.date
+    df['count'] = 1
+    burnup_data = df.groupby('date').count()[['count']].cumsum()
+    
+    plt.figure(figsize=(10,5))
+    plt.plot(burnup_data.index, burnup_data['count'], marker='o', label='Completed Work')
+    plt.xlabel('Date')
+    plt.ylabel('Cumulative Issues')
+    plt.title('Burnup Chart')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.show()
+
+def plot_cfd(df):
+    df['date'] = df['created_at'].dt.date
+    df['count'] = 1
+    cfd_data = df.groupby('date').count()[['count']].cumsum()
+    
+    plt.figure(figsize=(10,5))
+    plt.plot(cfd_data.index, cfd_data['count'], marker='o', label='Total Issues Opened')
+    plt.xlabel('Date')
+    plt.ylabel('Cumulative Issues')
+    plt.title('Cumulative Flow Diagram')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.show()
+
+def plot_velocity_chart(df):
+    df['sprint'] = df['created_at'].dt.to_period('W')
+    velocity_data = df.groupby('sprint').count()[['title']]
+    
+    plt.figure(figsize=(10,5))
+    plt.bar(velocity_data.index.astype(str), velocity_data['title'], color='blue', label='Completed Issues')
+    plt.xlabel('Sprint')
+    plt.ylabel('Completed Issues')
+    plt.title('Velocity Chart')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.show()
+
+def plot_lead_cycle_time(df):
+    df['lead_time'] = (df['closed_at'] - df['created_at']).dt.days
+    df = df.dropna()
+    
+    plt.figure(figsize=(10,5))
+    plt.hist(df['lead_time'], bins=10, color='green', alpha=0.7, label='Lead Time')
+    plt.xlabel('Days')
+    plt.ylabel('Issue Count')
+    plt.title('Lead Time & Cycle Time Histogram')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_throughput_chart(df):
+    df['week'] = df['created_at'].dt.to_period('W')
+    throughput_data = df.groupby('week').count()[['title']]
+    
+    plt.figure(figsize=(10,5))
+    plt.bar(throughput_data.index.astype(str), throughput_data['title'], color='purple', label='Completed Issues per Week')
+    plt.xlabel('Week')
+    plt.ylabel('Completed Issues')
+    plt.title('Throughput Chart')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid()
+    plt.show()
+
+def main():
+    issues = get_issues()
+    df = process_issues(issues)
+    plot_burndown_chart(df)
+    plot_burnup_chart(df)
+    plot_cfd(df)
+    plot_velocity_chart(df)
+    plot_lead_cycle_time(df)
+    plot_throughput_chart(df)
+
+if __name__ == "__main__":
+    main()
