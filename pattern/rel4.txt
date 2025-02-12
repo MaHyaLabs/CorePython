@@ -1,0 +1,69 @@
+import requests
+from datetime import datetime
+from fpdf import FPDF
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com"  # Change for self-hosted GitLab
+PROJECT_ID = "your_project_id"  # Replace with your GitLab project ID
+ACCESS_TOKEN = "your_project_access_token"  # Replace with your token
+BRANCH_NAME = "main"  # Change if needed
+
+# GitLab API Endpoints
+COMMITS_URL = f"{GITLAB_URL}/api/v4/projects/{PROJECT_ID}/repository/commits"
+
+def get_last_commit():
+    """Fetches the latest commit from the repository."""
+    headers = {"Private-Token": ACCESS_TOKEN}
+    params = {"ref_name": BRANCH_NAME, "per_page": 1}  # Only get the latest commit
+    response = requests.get(COMMITS_URL, headers=headers, params=params)
+
+    return response.json()[0] if response.status_code == 200 and response.json() else None
+
+def get_commit_diff(commit_id):
+    """Fetches the file changes for the last commit."""
+    url = f"{COMMITS_URL}/{commit_id}/diff"
+    headers = {"Private-Token": ACCESS_TOKEN}
+    response = requests.get(url, headers=headers)
+
+    return response.json() if response.status_code == 200 else []
+
+def generate_pdf(commit, diffs):
+    """Generates a plain-text PDF for the last commit."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "", 12)
+
+    # Title
+    pdf.cell(200, 10, "GitLab Release Notes - Latest Commit", ln=True)
+    pdf.cell(200, 10, f"Branch: {BRANCH_NAME}", ln=True)
+    pdf.cell(200, 10, f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
+    pdf.ln(10)
+
+    # Commit Details
+    pdf.cell(0, 10, "Commit Details:", ln=True)
+    pdf.cell(0, 8, f"Commit ID: {commit['id'][:8]}", ln=True)
+    pdf.cell(0, 8, f"Author: {commit['author_name']}", ln=True)
+    pdf.cell(0, 8, f"Date: {commit['created_at'][:10]}", ln=True)
+    pdf.cell(0, 8, f"Message: {commit['message']}", ln=True)
+    pdf.ln(10)
+
+    # File Changes
+    pdf.cell(0, 10, "File Changes:", ln=True)
+    if diffs:
+        for diff in diffs:
+            pdf.cell(0, 8, f"- {diff['old_path']} → {diff['new_path']}", ln=True)
+    else:
+        pdf.cell(0, 8, "No file changes found.", ln=True)
+
+    # Save PDF
+    pdf_file = "gitlab_last_commit_release_notes.pdf"
+    pdf.output(pdf_file)
+    print(f"✅ Last commit release notes generated: {pdf_file}")
+
+if __name__ == "__main__":
+    commit = get_last_commit()
+    if commit:
+        diffs = get_commit_diff(commit['id'])
+        generate_pdf(commit, diffs)
+    else:
+        print("No commits found.")
