@@ -28,7 +28,7 @@ def process_issues(issues):
 def save_plot(fig, filename):
     filepath = os.path.join("reports", filename)
     fig.savefig(filepath)
-    return filepath
+    return filename  # Return filename instead of full path for HTML referencing
 
 def plot_chart(df, title, xlabel, ylabel, filename, plot_func):
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -100,12 +100,12 @@ def main():
     df = process_issues(issues)
     
     images = {
-        "Sprint Burndown Chart": plot_chart(df, "Sprint Burndown Chart", "Date", "Issues Remaining", "burndown_chart.png", plot_burndown_chart),
-        "Sprint Burnup Chart": plot_chart(df, "Sprint Burnup Chart", "Date", "Completed Work", "burnup_chart.png", plot_burnup_chart),
-        "Cumulative Flow Diagram": plot_chart(df, "Cumulative Flow Diagram", "Date", "Cumulative Issues", "cfd_chart.png", plot_cfd),
-        "Sprint Velocity Chart": plot_chart(df, "Sprint Velocity Chart", "Sprint", "Completed Issues", "velocity_chart.png", plot_velocity_chart),
-        "Lead Time & Cycle Time Histogram": plot_chart(df, "Lead Time & Cycle Time Histogram", "Days", "Issue Count", "lead_cycle_time.png", plot_lead_cycle_time),
-        "Sprint Throughput Chart": plot_chart(df, "Sprint Throughput Chart", "Week", "Completed Issues", "throughput_chart.png", plot_throughput_chart),
+        "Sprint Burndown Chart": plot_chart(df, "Sprint Burndown Chart", "Date", "Issues Remaining", "reports/burndown_chart.png", plot_burndown_chart),
+        "Sprint Burnup Chart": plot_chart(df, "Sprint Burnup Chart", "Date", "Completed Work", "reports/burnup_chart.png", plot_burnup_chart),
+        "Cumulative Flow Diagram": plot_chart(df, "Cumulative Flow Diagram", "Date", "Cumulative Issues", "reports/cfd_chart.png", plot_cfd),
+        "Sprint Velocity Chart": plot_chart(df, "Sprint Velocity Chart", "Sprint", "Completed Issues", "reports/velocity_chart.png", plot_velocity_chart),
+        "Lead Time & Cycle Time Histogram": plot_chart(df, "Lead Time & Cycle Time Histogram", "Days", "Issue Count", "reports/lead_cycle_time.png", plot_lead_cycle_time),
+        "Sprint Throughput Chart": plot_chart(df, "Sprint Throughput Chart", "Week", "Completed Issues", "reports/throughput_chart.png", plot_throughput_chart),
     }
     
     generate_html_report(images)
