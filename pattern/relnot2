@@ -1,0 +1,121 @@
+import requests
+import json
+from jinja2 import Template
+import os
+
+# GitLab API settings
+GITLAB_URL = "https://gitlab.com/api/v4"
+PRIVATE_TOKEN = "YOUR_GITLAB_ACCESS_TOKEN"
+PROJECT_ID = "YOUR_PROJECT_ID"
+SLACK_WEBHOOK_URL = "YOUR_SLACK_WEBHOOK_URL"
+
+# Fetch merged merge requests
+def fetch_merge_requests(target_branch="main", since=None):
+    url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests"
+    params = {
+        "state": "merged",
+        "target_branch": target_branch,
+        "updated_after": since,
+        "per_page": 100
+    }
+    headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
+    response = requests.get(url, headers=headers, params=params)
+    return response.json() if response.status_code == 200 else []
+
+# Fetch details for each MR
+def get_mr_details(mr):
+    approvals_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr['id']}/approvals"
+    security_test_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr['id']}/pipelines"
+    headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
+    
+    approvals_response = requests.get(approvals_url, headers=headers).json()
+    security_test_response = requests.get(security_test_url, headers=headers).json()
+    
+    approvals = [user["name"] for user in approvals_response.get("approved_by", [])]
+    security_tests = security_test_response.get("pipelines", [])
+    security_status = security_tests[0]["status"] if security_tests else "Unknown"
+    
+    return {
+        "title": mr["title"],
+        "description": mr["description"],
+        "author": mr["author"]["name"],
+        "merged_by": mr["merged_by"]["name"],
+        "web_url": mr["web_url"],
+        "labels": mr.get("labels", []),
+        "merge_date": mr.get("merged_at", "N/A"),
+        "approvals": approvals,
+        "security_status": security_status
+    }
+
+# Categorize MRs based on labels
+def categorize_mrs(mrs):
+    categories = {"Features": [], "Bug Fixes": [], "Enhancements": [], "Breaking Changes": []}
+    for mr in mrs:
+        if "feature" in mr["labels"]:
+            categories["Features"].append(mr)
+        elif "bug" in mr["labels"]:
+            categories["Bug Fixes"].append(mr)
+        elif "enhancement" in mr["labels"]:
+            categories["Enhancements"].append(mr)
+        elif "breaking-change" in mr["labels"]:
+            categories["Breaking Changes"].append(mr)
+        else:
+            categories.setdefault("Other", []).append(mr)
+    return categories
+
+# Generate release notes using Jinja2 template (HTML output)
+def generate_html_release_notes(mrs):
+    template_str = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Release Notes</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            h1 { color: #333; }
+            .category { font-size: 20px; font-weight: bold; margin-top: 20px; }
+            .mr { margin-left: 20px; }
+            .mr-title { font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>Release Notes</h1>
+        {% for category, items in categories.items() %}
+            <div class="category">{{ category }}</div>
+            {% for mr in items %}
+                <div class="mr">
+                    <p class="mr-title">🔹 <a href="{{ mr.web_url }}">{{ mr.title }}</a> by {{ mr.author }} (Merged by {{ mr.merged_by }})</p>
+                    <p>{{ mr.description }}</p>
+                    <p><strong>Approvals:</strong> {{ ", ".join(mr.approvals) if mr.approvals else "None" }}</p>
+                    <p><strong>Security Test Status:</strong> {{ mr.security_status }}</p>
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </body>
+    </html>
+    """
+    
+    template = Template(template_str)
+    return template.render(categories=mrs)
+
+# Send release notes to Slack
+def send_to_slack(message):
+    payload = {"text": message}
+    headers = {"Content-Type": "application/json"}
+    requests.post(SLACK_WEBHOOK_URL, headers=headers, data=json.dumps(payload))
+
+# Main function
+def main():
+    merge_requests = fetch_merge_requests()
+    mr_details = [get_mr_details(mr) for mr in merge_requests]
+    categorized_mrs = categorize_mrs(mr_details)
+    release_notes_html = generate_html_release_notes(categorized_mrs)
+    
+    with open("release_notes.html", "w", encoding="utf-8") as f:
+        f.write(release_notes_html)
+    
+    print("Release notes generated: release_notes.html")
+    send_to_slack("New release notes generated: See attachment")
+
+if __name__ == "__main__":
+    main()
