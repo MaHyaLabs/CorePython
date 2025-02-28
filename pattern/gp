@@ -1,0 +1,32 @@
+data 
+
+1. Burndown Chart
+Tracks remaining work in a sprint over time.
+Helps assess if the team is on track to complete work before the deadline.
+2. Burnup Chart
+Shows completed work vs. total scope over time.
+Helps in understanding scope creep and progress.
+3. Cumulative Flow Diagram (CFD)
+Displays the distribution of work across different stages (To Do, In Progress, Done).
+Helps identify bottlenecks.
+4. Velocity Chart
+Shows completed story points or issues per sprint.
+Helps in predicting future sprint capacity.
+5. Lead Time & Cycle Time Histogram
+Lead Time: Time from issue creation to closure.
+Cycle Time: Time spent in the "In Progress" state.
+Helps measure efficiency.
+6. Throughput Chart
+Tracks the number of issues completed per sprint or time period.
+Helps in forecasting delivery.
+7. Sprint Progress Chart
+Percentage of completed vs. remaining tasks/issues in an ongoing sprint.
+8. Epic Progress Chart
+Shows progress on issues under an epic.
+Helps in tracking long-term feature development.
+9. Work Item Age Chart
+Shows the age of open issues/tasks.
+Helps identify stale work.
+10. Flow Efficiency Chart
+Ratio of time spent actively working vs. total elapsed time.
+Helps in optimizing work processes.
