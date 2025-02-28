@@ -9,107 +9,114 @@ PRIVATE_TOKEN = "YOUR_GITLAB_ACCESS_TOKEN"
 PROJECT_ID = "YOUR_PROJECT_ID"
 SLACK_WEBHOOK_URL = "YOUR_SLACK_WEBHOOK_URL"
 
-# Fetch merged merge requests
-def fetch_merge_requests(target_branch="main", since=None):
+# Fetch the last merged merge request
+def fetch_last_merged_mr(target_branch="main"):
     url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests"
     params = {
         "state": "merged",
         "target_branch": target_branch,
-        "updated_after": since,
-        "per_page": 100
+        "order_by": "updated_at",
+        "sort": "desc",
+        "per_page": 1
     }
     headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
     response = requests.get(url, headers=headers, params=params)
-    return response.json() if response.status_code == 200 else []
+    return response.json()[0] if response.status_code == 200 and response.json() else None
 
-# Fetch details for each MR
+# Fetch details for the last MR
 def get_mr_details(mr):
-    approvals_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr['id']}/approvals"
-    security_test_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr['id']}/pipelines"
+    mr_id = mr["id"]
+    approvals_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/approvals"
+    commits_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/commits"
+    pipelines_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/pipelines"
+    diff_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/changes"
     headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
     
     approvals_response = requests.get(approvals_url, headers=headers).json()
-    security_test_response = requests.get(security_test_url, headers=headers).json()
+    commits_response = requests.get(commits_url, headers=headers).json()
+    pipelines_response = requests.get(pipelines_url, headers=headers).json()
+    diff_response = requests.get(diff_url, headers=headers).json()
     
-    approvals = [user["name"] for user in approvals_response.get("approved_by", [])]
-    security_tests = security_test_response.get("pipelines", [])
-    security_status = security_tests[0]["status"] if security_tests else "Unknown"
+    approvals = [user["user"]["name"] for user in approvals_response.get("approved_by", [])]
+    commits = [commit["title"] for commit in commits_response]
+    pipeline = pipelines_response[0] if pipelines_response else {}
+    pipeline_status = pipeline.get("status", "Unknown")
+    pipeline_id = pipeline.get("id", "N/A")
+    pipeline_web_url = pipeline.get("web_url", "N/A")
+    diff_link = mr["web_url"] + "/diffs"
     
     return {
+        "id": mr["iid"],
         "title": mr["title"],
         "description": mr["description"],
         "author": mr["author"]["name"],
         "merged_by": mr["merged_by"]["name"],
         "web_url": mr["web_url"],
-        "labels": mr.get("labels", []),
+        "source_branch": mr["source_branch"],
+        "target_branch": mr["target_branch"],
+        "labels": ", ".join(mr.get("labels", [])),
         "merge_date": mr.get("merged_at", "N/A"),
-        "approvals": approvals,
-        "security_status": security_status
+        "approvals": ", ".join(approvals) if approvals else "None",
+        "commits": ", ".join(commits) if commits else "No commits",
+        "pipeline_status": pipeline_status,
+        "pipeline_id": pipeline_id,
+        "pipeline_web_url": pipeline_web_url,
+        "diff_link": diff_link,
+        "assignee": mr.get("assignee", {}).get("name", "Unassigned"),
+        "reviewer": ", ".join([r["name"] for r in mr.get("reviewers", [])]) if mr.get("reviewers") else "No reviewers"
     }
 
-# Categorize MRs based on labels
-def categorize_mrs(mrs):
-    categories = {"Features": [], "Bug Fixes": [], "Enhancements": [], "Breaking Changes": []}
-    for mr in mrs:
-        if "feature" in mr["labels"]:
-            categories["Features"].append(mr)
-        elif "bug" in mr["labels"]:
-            categories["Bug Fixes"].append(mr)
-        elif "enhancement" in mr["labels"]:
-            categories["Enhancements"].append(mr)
-        elif "breaking-change" in mr["labels"]:
-            categories["Breaking Changes"].append(mr)
-        else:
-            categories.setdefault("Other", []).append(mr)
-    return categories
-
 # Generate release notes using Jinja2 template (HTML output)
-def generate_html_release_notes(mrs):
+def generate_html_release_notes(mr):
     template_str = """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Release Notes</title>
+        <title>Latest Merge Request Release Notes</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; }
             h1 { color: #333; }
-            .category { font-size: 20px; font-weight: bold; margin-top: 20px; }
-            .mr { margin-left: 20px; }
-            .mr-title { font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f4f4f4; }
         </style>
     </head>
     <body>
-        <h1>Release Notes</h1>
-        {% for category, items in categories.items() %}
-            <div class="category">{{ category }}</div>
-            {% for mr in items %}
-                <div class="mr">
-                    <p class="mr-title">🔹 <a href="{{ mr.web_url }}">{{ mr.title }}</a> by {{ mr.author }} (Merged by {{ mr.merged_by }})</p>
-                    <p>{{ mr.description }}</p>
-                    <p><strong>Approvals:</strong> {{ ", ".join(mr.approvals) if mr.approvals else "None" }}</p>
-                    <p><strong>Security Test Status:</strong> {{ mr.security_status }}</p>
-                </div>
-            {% endfor %}
-        {% endfor %}
+        <h1>Latest Merge Request Release Notes</h1>
+        <table>
+            <tr><th>Merge Request ID</th><td>{{ mr.id }}</td></tr>
+            <tr><th>Title</th><td><a href="{{ mr.web_url }}">{{ mr.title }}</a></td></tr>
+            <tr><th>Description</th><td>{{ mr.description }}</td></tr>
+            <tr><th>Author</th><td>{{ mr.author }}</td></tr>
+            <tr><th>Merged By</th><td>{{ mr.merged_by }}</td></tr>
+            <tr><th>Source Branch</th><td>{{ mr.source_branch }}</td></tr>
+            <tr><th>Target Branch</th><td>{{ mr.target_branch }}</td></tr>
+            <tr><th>Approvals</th><td>{{ mr.approvals }}</td></tr>
+            <tr><th>Commits</th><td>{{ mr.commits }}</td></tr>
+            <tr><th>Labels</th><td>{{ mr.labels }}</td></tr>
+            <tr><th>Merge Date</th><td>{{ mr.merge_date }}</td></tr>
+            <tr><th>Pipeline Status</th><td>{{ mr.pipeline_status }}</td></tr>
+            <tr><th>Pipeline ID</th><td>{{ mr.pipeline_id }}</td></tr>
+            <tr><th>Pipeline Link</th><td><a href="{{ mr.pipeline_web_url }}">View Pipeline</a></td></tr>
+            <tr><th>Difference Link</th><td><a href="{{ mr.diff_link }}">View Diffs</a></td></tr>
+            <tr><th>Assignee</th><td>{{ mr.assignee }}</td></tr>
+            <tr><th>Reviewer</th><td>{{ mr.reviewer }}</td></tr>
+        </table>
     </body>
     </html>
     """
-    
     template = Template(template_str)
-    return template.render(categories=mrs)
-
-# Send release notes to Slack
-def send_to_slack(message):
-    payload = {"text": message}
-    headers = {"Content-Type": "application/json"}
-    requests.post(SLACK_WEBHOOK_URL, headers=headers, data=json.dumps(payload))
+    return template.render(mr=mr)
 
 # Main function
 def main():
-    merge_requests = fetch_merge_requests()
-    mr_details = [get_mr_details(mr) for mr in merge_requests]
-    categorized_mrs = categorize_mrs(mr_details)
-    release_notes_html = generate_html_release_notes(categorized_mrs)
+    last_mr = fetch_last_merged_mr()
+    if not last_mr:
+        print("No recent merged merge requests found.")
+        return
+    
+    mr_details = get_mr_details(last_mr)
+    release_notes_html = generate_html_release_notes(mr_details)
     
     with open("release_notes.html", "w", encoding="utf-8") as f:
         f.write(release_notes_html)
