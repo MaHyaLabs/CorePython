@@ -1,5 +1,5 @@
 import requests
-import matplotlib.pyplot as plt
+import plotly.express as px
 import pandas as pd
 import datetime
 import os
@@ -10,24 +10,29 @@ GITLAB_PRIVATE_TOKEN = "your_private_token"
 GITLAB_PROJECT_ID = "your_project_id"
 HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
 
-import requests
-import matplotlib.pyplot as plt
-import pandas as pd
-import datetime
-import os
-import mpld3  # For interactive charts
+# 🔹 Get the Current Sprint (Active Milestone)
+def get_current_sprint():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/milestones?state=active"
+    response = requests.get(url, headers=HEADERS)
+    milestones = response.json()
+    
+    if milestones:
+        current_milestone = sorted(milestones, key=lambda m: m["due_date"] or "", reverse=True)[0]
+        return current_milestone["title"]
+    return None
 
-# GitLab Configuration
-GITLAB_URL = "https://gitlab.com/api/v4"
-GITLAB_PRIVATE_TOKEN = "your_private_token"
-GITLAB_PROJECT_ID = "your_project_id"
-HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
-
-def get_issues():
+# 🔹 Get Issues for the Current Sprint
+def get_issues(current_sprint):
     url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/issues"
     response = requests.get(url, headers=HEADERS)
-    return response.json()
+    issues = response.json()
+    
+    # Filter issues by the current sprint (milestone)
+    sprint_issues = [issue for issue in issues if issue.get("milestone", {}).get("title") == current_sprint]
+    
+    return sprint_issues
 
+# 🔹 Process Issues into a Pandas DataFrame
 def process_issues(issues):
     data = []
     for issue in issues:
@@ -38,25 +43,13 @@ def process_issues(issues):
         data.append({"title": issue['title'], "created_at": created_at, "closed_at": closed_at})
     return pd.DataFrame(data)
 
+# 🔹 Save Interactive Plot
 def save_interactive_plot(fig, filename):
     filepath = os.path.join("reports", filename)
-    html_str = mpld3.fig_to_html(fig)
-    with open(filepath, "w") as f:
-        f.write(html_str)
+    fig.write_html(filepath)
     return filename  # Return filename for HTML referencing
 
-def plot_chart(df, title, xlabel, ylabel, filename, plot_func):
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_func(ax, df)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.legend()
-    ax.grid()
-    filepath = save_interactive_plot(fig, filename)
-    plt.close(fig)
-    return filepath
-
+# 🔹 Generate HTML Report
 def generate_html_report(images):
     html_content = """
     <html>
@@ -67,45 +60,89 @@ def generate_html_report(images):
     for title, img in images.items():
         html_content += f'<h2>{title}</h2><iframe src="{img}" width="900" height="600"></iframe><br><br>'
     html_content += "</body></html>"
+
     with open("reports/agile_sprint_report.html", "w") as f:
         f.write(html_content)
 
-def plot_burndown_chart(ax, df):
+# 🔹 Plot Interactive Burndown Chart
+def plot_burndown_chart(df):
     df = df.sort_values(by='created_at')
     total_issues = len(df)
     df['remaining'] = total_issues - df.index
-    ax.plot(df['created_at'], df['remaining'], marker='o', label='Remaining Issues')
-    for i, txt in enumerate(df['remaining']):
-        ax.annotate(txt, (df['created_at'].iloc[i], df['remaining'].iloc[i]), textcoords="offset points", xytext=(0,10), ha='center')
+    
+    fig = px.line(df, x="created_at", y="remaining", markers=True, title="Sprint Burndown Chart")
+    return save_interactive_plot(fig, "burndown_chart.html")
 
-def plot_burnup_chart(ax, df):
+# 🔹 Plot Interactive Burnup Chart
+def plot_burnup_chart(df):
     df['date'] = df['created_at'].dt.date
     df['count'] = 1
     burnup_data = df.groupby('date').count()[['count']].cumsum()
-    ax.plot(burnup_data.index, burnup_data['count'], marker='o', label='Completed Work')
-    for i, txt in enumerate(burnup_data['count']):
-        ax.annotate(txt, (burnup_data.index[i], burnup_data['count'].iloc[i]), textcoords="offset points", xytext=(0,10), ha='center')
+    
+    fig = px.line(burnup_data, x=burnup_data.index, y="count", markers=True, title="Sprint Burnup Chart")
+    return save_interactive_plot(fig, "burnup_chart.html")
 
-def plot_cfd(ax, df):
+# 🔹 Plot Interactive Cumulative Flow Diagram (CFD)
+def plot_cfd(df):
     df['date'] = df['created_at'].dt.date
     df['count'] = 1
     cfd_data = df.groupby('date').count()[['count']].cumsum()
-    ax.plot(cfd_data.index, cfd_data['count'], marker='o', label='Total Issues Opened')
-    for i, txt in enumerate(cfd_data['count']):
-        ax.annotate(txt, (cfd_data.index[i], cfd_data['count'].iloc[i]), textcoords="offset points", xytext=(0,10), ha='center')
+    
+    fig = px.area(cfd_data, x=cfd_data.index, y="count", title="Cumulative Flow Diagram")
+    return save_interactive_plot(fig, "cfd_chart.html")
 
+# 🔹 Plot Interactive Sprint Velocity Chart
+def plot_velocity_chart(df):
+    df['sprint'] = df['created_at'].dt.to_period('W')
+    velocity_data = df.groupby('sprint').count()[['title']]
+    
+    fig = px.bar(velocity_data, x=velocity_data.index.astype(str), y="title", title="Sprint Velocity Chart", labels={"title": "Completed Issues"})
+    return save_interactive_plot(fig, "velocity_chart.html")
+
+# 🔹 Plot Interactive Lead & Cycle Time Histogram
+def plot_lead_cycle_time(df):
+    df['lead_time'] = (df['closed_at'] - df['created_at']).dt.days
+    df = df.dropna()
+    
+    fig = px.histogram(df, x="lead_time", nbins=10, title="Lead & Cycle Time Histogram")
+    return save_interactive_plot(fig, "lead_cycle_time.html")
+
+# 🔹 Plot Interactive Sprint Throughput Chart
+def plot_throughput_chart(df):
+    df['week'] = df['created_at'].dt.to_period('W')
+    throughput_data = df.groupby('week').count()[['title']]
+    
+    fig = px.bar(throughput_data, x=throughput_data.index.astype(str), y="title", title="Sprint Throughput Chart", labels={"title": "Completed Issues per Week"})
+    return save_interactive_plot(fig, "throughput_chart.html")
+
+# 🔹 Main Function
 def main():
     os.makedirs("reports", exist_ok=True)
-    issues = get_issues()
+
+    # Get the current sprint
+    current_sprint = get_current_sprint()
+    if not current_sprint:
+        print("No active sprint found.")
+        return
+
+    print(f"Generating report for sprint: {current_sprint}")
+
+    issues = get_issues(current_sprint)
     df = process_issues(issues)
-    
+
+    # Generate Interactive Charts
     images = {
-        "Sprint Burndown Chart": plot_chart(df, "Sprint Burndown Chart", "Date", "Issues Remaining", "reports/burndown_chart.html", plot_burndown_chart),
-        "Sprint Burnup Chart": plot_chart(df, "Sprint Burnup Chart", "Date", "Completed Work", "reports/burnup_chart.html", plot_burnup_chart),
-        "Cumulative Flow Diagram": plot_chart(df, "Cumulative Flow Diagram", "Date", "Cumulative Issues", "reports/cfd_chart.html", plot_cfd),
+        "Sprint Burndown Chart": plot_burndown_chart(df),
+        "Sprint Burnup Chart": plot_burnup_chart(df),
+        "Cumulative Flow Diagram": plot_cfd(df),
+        "Sprint Velocity Chart": plot_velocity_chart(df),
+        "Lead & Cycle Time Histogram": plot_lead_cycle_time(df),
+        "Sprint Throughput Chart": plot_throughput_chart(df),
     }
-    
+
+    # Generate HTML Report
     generate_html_report(images)
 
+# 🔹 Run the Script
 if __name__ == "__main__":
     main()
