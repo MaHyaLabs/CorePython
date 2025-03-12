@@ -1,0 +1,43 @@
+import requests
+import plotly.express as px
+import pandas as pd
+import datetime
+import os
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com/api/v4"
+GITLAB_PRIVATE_TOKEN = "your_private_token"
+GITLAB_PROJECT_ID = "your_project_id"
+HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
+
+# ──────────────────────────────────────────────────────────────
+def get_current_sprint():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/milestones?state=active"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch milestones:", response.status_code, response.text)
+        return None
+    milestones = response.json()
+    if milestones:
+        return sorted(milestones, key=lambda m: m.get("due_date") or "", reverse=True)[0]
+    return None
+
+def get_issues(current_sprint):
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/issues?per_page=100"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch issues:", response.status_code, response.text)
+        return []
+    issues = response.json()
+    sprint_issues = [i for i in issues if i.get("milestone", {}).get("title") == current_sprint["title"]]
+    return sprint_issues
+
+def get_members():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/members/all"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch members:", response.status_code, response.text)
+        return []
+    return response.json()
+
+# ... keep rest of the code unchanged ...
