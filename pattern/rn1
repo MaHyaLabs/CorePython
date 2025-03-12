@@ -1,0 +1,128 @@
+import requests
+import json
+import os
+from jinja2 import Template
+
+# GitLab API Settings (replace these with your actual values)
+GITLAB_URL = "https://gitlab.com/api/v4"
+PRIVATE_TOKEN = "YOUR_GITLAB_ACCESS_TOKEN"
+PROJECT_ID = "YOUR_PROJECT_ID"
+
+# Fetch the last merged merge request
+def fetch_last_merged_mr(target_branch="main"):
+    url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests"
+    params = {
+        "state": "merged",
+        "target_branch": target_branch,
+        "order_by": "updated_at",
+        "sort": "desc",
+        "per_page": 1
+    }
+    headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
+    response = requests.get(url, headers=headers, params=params)
+    return response.json()[0] if response.status_code == 200 and response.json() else None
+
+# Get detailed info about MR
+def get_mr_details(mr):
+    mr_id = mr["iid"]
+    headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
+
+    # Approvals
+    approvals_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/approvals"
+    approvals_response = requests.get(approvals_url, headers=headers).json()
+    approvals = [user["user"]["name"] for user in approvals_response.get("approved_by", [])]
+
+    # Commits
+    commits_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/commits"
+    commits_response = requests.get(commits_url, headers=headers).json()
+    commits = [f"<a href='https://gitlab.com/{mr['web_url'].split('/')[3]}/{mr['web_url'].split('/')[4]}/-/commit/{commit['id']}'>{commit['id'][:8]}</a>: {commit['title']}" for commit in commits_response]
+
+    # Pipelines
+    pipelines_url = f"{GITLAB_URL}/projects/{PROJECT_ID}/merge_requests/{mr_id}/pipelines"
+    pipelines_response = requests.get(pipelines_url, headers=headers).json()
+    pipeline = pipelines_response[0] if pipelines_response else {}
+    pipeline_id = pipeline.get("id", "N/A")
+    pipeline_status = pipeline.get("status", "Unknown")
+    pipeline_web_url = pipeline.get("web_url", "#")
+
+    return {
+        "id": mr["iid"],
+        "title": mr["title"],
+        "description": mr["description"],
+        "author": mr["author"]["name"],
+        "merged_by": mr["merged_by"]["name"],
+        "web_url": mr["web_url"],
+        "source_branch": mr["source_branch"],
+        "target_branch": mr["target_branch"],
+        "labels": ", ".join(mr.get("labels", [])),
+        "merge_date": mr.get("merged_at", "N/A"),
+        "approvals": ", ".join(approvals) if approvals else "None",
+        "commits": "<br>".join(commits) if commits else "No commits",
+        "pipeline_status": pipeline_status,
+        "pipeline_id": pipeline_id,
+        "pipeline_web_url": pipeline_web_url,
+        "diff_link": mr["web_url"] + "/diffs",
+        "assignee": mr.get("assignee", {}).get("name", "Unassigned"),
+        "reviewer": ", ".join([r["name"] for r in mr.get("reviewers", [])]) if mr.get("reviewers") else "No reviewers"
+    }
+
+# Generate HTML release notes
+def generate_html_release_notes(mr):
+    template_str = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>GitLab Release Notes</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 30px; }
+            h1 { color: #222; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 10px; border: 1px solid #ccc; text-align: left; }
+            th { background-color: #f4f4f4; }
+            a { color: #007BFF; text-decoration: none; }
+        </style>
+    </head>
+    <body>
+        <h1>Release Notes: Merge Request #{{ mr.id }}</h1>
+        <table>
+            <tr><th>Title</th><td><a href="{{ mr.web_url }}">{{ mr.title }}</a></td></tr>
+            <tr><th>Description</th><td>{{ mr.description }}</td></tr>
+            <tr><th>Author</th><td>{{ mr.author }}</td></tr>
+            <tr><th>Merged By</th><td>{{ mr.merged_by }}</td></tr>
+            <tr><th>Source Branch</th><td>{{ mr.source_branch }}</td></tr>
+            <tr><th>Target Branch</th><td>{{ mr.target_branch }}</td></tr>
+            <tr><th>Assignee</th><td>{{ mr.assignee }}</td></tr>
+            <tr><th>Reviewer(s)</th><td>{{ mr.reviewer }}</td></tr>
+            <tr><th>Labels</th><td>{{ mr.labels }}</td></tr>
+            <tr><th>Merge Date</th><td>{{ mr.merge_date }}</td></tr>
+            <tr><th>Approvals</th><td>{{ mr.approvals }}</td></tr>
+            <tr><th>Commits</th><td>{{ mr.commits|safe }}</td></tr>
+            <tr><th>Pipeline ID</th><td>{{ mr.pipeline_id }}</td></tr>
+            <tr><th>Pipeline Status</th><td>{{ mr.pipeline_status }}</td></tr>
+            <tr><th>Pipeline Link</th><td><a href="{{ mr.pipeline_web_url }}">View Pipeline</a></td></tr>
+            <tr><th>Diff Link</th><td><a href="{{ mr.diff_link }}">View Diffs</a></td></tr>
+        </table>
+    </body>
+    </html>
+    """
+    template = Template(template_str)
+    return template.render(mr=mr)
+
+# Main function
+def main():
+    last_mr = fetch_last_merged_mr()
+    if not last_mr:
+        print("No recently merged MRs found.")
+        return
+
+    mr_details = get_mr_details(last_mr)
+    html = generate_html_release_notes(mr_details)
+
+    os.makedirs("public", exist_ok=True)
+    with open("public/release_notes.html", "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print("✅ Release notes generated and saved to public/release_notes.html")
+
+if __name__ == "__main__":
+    main()
