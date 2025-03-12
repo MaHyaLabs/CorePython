@@ -3,6 +3,12 @@ import json
 import os
 from jinja2 import Template
 
+filename = f"Release_Notes_MR_{last_mr['iid']}.html"
+with open(filename, "w", encoding="utf-8") as f:
+    f.write(release_notes_html)
+
+print(f"Release notes generated: {filename}")
+
 # GitLab API Settings (replace these with your actual values)
 GITLAB_URL = "https://gitlab.com/api/v4"
 PRIVATE_TOKEN = "YOUR_GITLAB_ACCESS_TOKEN"
