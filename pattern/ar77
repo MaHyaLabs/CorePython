@@ -1,0 +1,212 @@
+import requests
+import plotly.express as px
+import pandas as pd
+import datetime
+import os
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com/api/v4"
+GITLAB_PRIVATE_TOKEN = "your_private_token"
+GITLAB_PROJECT_ID = "your_project_id"
+HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
+
+# ──────────────────────────────────────────────────────────────
+def get_current_sprint():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/milestones?state=active"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch milestones:", response.status_code, response.text)
+        return None
+    milestones = response.json()
+    if milestones:
+        return sorted(milestones, key=lambda m: m.get("due_date") or "", reverse=True)[0]
+    return None
+
+def get_issues(current_sprint):
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/issues?per_page=100"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch issues:", response.status_code, response.text)
+        return []
+    issues = response.json()
+    sprint_issues = [i for i in issues if i.get("milestone", {}).get("title") == current_sprint["title"]]
+    return sprint_issues
+
+def get_members():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/members/all"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code != 200:
+        print("Failed to fetch members:", response.status_code, response.text)
+        return []
+    return response.json()
+
+def generate_created_closed_table(issues):
+    data = []
+    for issue in issues:
+        created = issue.get("created_at")[:10]
+        closed = issue.get("closed_at")
+        closed = closed[:10] if closed else None
+        data.append((created, 'Created'))
+        if closed:
+            data.append((closed, 'Closed'))
+    df = pd.DataFrame(data, columns=["Date", "Type"])
+    return df.groupby(["Date", "Type"]).size().unstack(fill_value=0).reset_index()
+
+def generate_status_distribution_chart(issues):
+    status_counts = {
+        'opened': 0,
+        'closed': 0,
+        'in_progress': 0,
+        'blocked': 0
+    }
+    for issue in issues:
+        state = issue.get("state")
+        if state == "closed":
+            status_counts['closed'] += 1
+        elif "blocked" in issue.get("labels", []):
+            status_counts['blocked'] += 1
+        elif "in progress" in issue.get("labels", []):
+            status_counts['in_progress'] += 1
+        else:
+            status_counts['opened'] += 1
+    df = pd.DataFrame({"Status": list(status_counts.keys()), "Count": list(status_counts.values())})
+    fig = px.pie(df, values="Count", names="Status", title="Issue Status Distribution")
+    return fig
+
+def generate_user_workload_chart(issues):
+    user_issues = {}
+    for issue in issues:
+        assignee = issue.get("assignee")
+        if assignee:
+            name = assignee.get("name")
+            user_issues[name] = user_issues.get(name, 0) + 1
+    df = pd.DataFrame({"User": list(user_issues.keys()), "Issues": list(user_issues.values())})
+    fig = px.bar(df, x="User", y="Issues", title="User Workload Report", text="Issues")
+    fig.update_traces(textposition='auto')
+    return fig
+
+def generate_velocity_chart(issues):
+    df = pd.DataFrame([{
+        "state": issue.get("state"),
+        "created_at": issue.get("created_at")[:10],
+        "closed_at": issue.get("closed_at")[:10] if issue.get("closed_at") else None
+    } for issue in issues])
+    velocity = df[df["state"] == "closed"].groupby("closed_at").size().reset_index(name="Completed")
+    fig = px.bar(velocity, x="closed_at", y="Completed", title="Velocity Chart", text="Completed")
+    fig.update_traces(textposition='auto')
+    return fig
+
+def generate_cumulative_flow_chart(issues):
+    dates = pd.date_range(start=datetime.date.today() - datetime.timedelta(days=14), periods=15).strftime("%Y-%m-%d")
+    data = []
+    for date in dates:
+        row = {"date": date, "To Do": 0, "In Progress": 0, "Done": 0}
+        for issue in issues:
+            created = issue.get("created_at")[:10]
+            closed = issue.get("closed_at")[:10] if issue.get("closed_at") else None
+            labels = issue.get("labels", [])
+            if created <= date and (not closed or closed > date):
+                if "in progress" in labels:
+                    row["In Progress"] += 1
+                elif closed and closed <= date:
+                    row["Done"] += 1
+                else:
+                    row["To Do"] += 1
+        data.append(row)
+    df = pd.DataFrame(data)
+    fig = px.area(df, x="date", y=["To Do", "In Progress", "Done"], title="Cumulative Flow Diagram")
+    return fig
+
+def generate_story_points_chart(issues):
+    points_data = []
+    for issue in issues:
+        estimate = next((int(label.split("::")[-1]) for label in issue.get("labels", []) if label.lower().startswith("sp::")), 0)
+        state = issue.get("state")
+        points_data.append({"State": state, "Points": estimate})
+    df = pd.DataFrame(points_data)
+    df_sum = df.groupby("State")["Points"].sum().reset_index()
+    fig = px.pie(df_sum, values="Points", names="State", title="Story Points Distribution")
+    return fig
+
+def generate_burndown_chart(issues, sprint):
+    start = datetime.datetime.strptime(sprint['start_date'], "%Y-%m-%d")
+    end = datetime.datetime.strptime(sprint['due_date'], "%Y-%m-%d")
+    date_range = pd.date_range(start=start, end=end)
+    ideal = list(reversed(range(len(date_range)+1)))
+    remaining = [0] * len(date_range)
+
+    total_issues = len(issues)
+    for i, day in enumerate(date_range):
+        day_str = day.strftime("%Y-%m-%d")
+        remaining[i] = total_issues - sum(1 for issue in issues if issue.get("closed_at") and issue["closed_at"][:10] <= day_str)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=date_range, y=ideal, mode='lines+markers', name='Ideal'))
+    fig.add_trace(go.Scatter(x=date_range, y=remaining, mode='lines+markers', name='Actual'))
+    fig.update_layout(title="Burndown Chart", xaxis_title="Date", yaxis_title="Remaining Issues")
+    return fig
+
+def generate_html_report(sprint, issues, members):
+    if not sprint:
+        print("Sprint is None, skipping report generation.")
+        return
+
+    df_table = generate_created_closed_table(issues)
+    created_closed_chart = px.bar(df_table, x="Date", y=["Created", "Closed"], barmode="group",
+                                  title="Daily Created vs Closed Issues", text_auto=True)
+    created_closed_chart.update_traces(textposition='auto')
+
+    status_chart = generate_status_distribution_chart(issues)
+    workload_chart = generate_user_workload_chart(issues)
+    velocity_chart = generate_velocity_chart(issues)
+    cfd_chart = generate_cumulative_flow_chart(issues)
+    story_points_chart = generate_story_points_chart(issues)
+    burndown_chart = generate_burndown_chart(issues, sprint)
+
+    html_content = f"""
+    <html>
+    <head>
+        <title>Agile Sprint Report - {sprint['title']}</title>
+        <script src=\"https://cdn.plot.ly/plotly-latest.min.js\"></script>
+    </head>
+    <body>
+        <h1>Agile Sprint Report</h1>
+        <h2>Sprint: {sprint['title']}</h2>
+        <p>Start: {sprint.get('start_date', 'N/A')} | Due: {sprint.get('due_date', 'N/A')}</p>
+        <h3>Team Members</h3>
+        <ul>
+        {''.join(f"<li>{member['name']} ({member['access_level']})</li>" for member in members)}
+        </ul>
+        <h3>Created vs Closed Issues</h3>
+        {created_closed_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>Issue Status Distribution</h3>
+        {status_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>User Workload</h3>
+        {workload_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>Velocity Chart</h3>
+        {velocity_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>Cumulative Flow Diagram</h3>
+        {cfd_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>Story Points Chart</h3>
+        {story_points_chart.to_html(include_plotlyjs=False, full_html=False)}
+        <h3>Burndown Chart</h3>
+        {burndown_chart.to_html(include_plotlyjs=False, full_html=False)}
+    </body>
+    </html>
+    """
+    os.makedirs("reports", exist_ok=True)
+    with open("reports/agile_sprint_report.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+def main():
+    sprint = get_current_sprint()
+    if not sprint:
+        return
+    issues = get_issues(sprint)
+    members = get_members()
+    generate_html_report(sprint, issues, members)
+
+if __name__ == "__main__":
+    main()
