@@ -1,0 +1,257 @@
+import requests
+import plotly.express as px
+import pandas as pd
+import datetime
+import os
+
+# GitLab Configuration
+GITLAB_URL = "https://gitlab.com/api/v4"
+GITLAB_PRIVATE_TOKEN = "your_private_token"
+GITLAB_PROJECT_ID = "your_project_id"
+HEADERS = {"PRIVATE-TOKEN": GITLAB_PRIVATE_TOKEN}
+
+# ──────────────────────────────────────────────────────────────
+def get_current_sprint():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/milestones?state=active"
+    response = requests.get(url, headers=HEADERS)
+    milestones = response.json()
+    if milestones:
+        return sorted(milestones, key=lambda m: m["due_date"] or "", reverse=True)[0]
+    return None
+
+def get_issues(current_sprint):
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/issues?per_page=100"
+    response = requests.get(url, headers=HEADERS)
+    issues = response.json()
+    sprint_issues = [i for i in issues if i.get("milestone", {}).get("title") == current_sprint["title"]]
+    return sprint_issues
+
+def get_members():
+    url = f"{GITLAB_URL}/projects/{GITLAB_PROJECT_ID}/members/all"
+    response = requests.get(url, headers=HEADERS)
+    return response.json()
+
+def process_issues(issues):
+    data = []
+    for issue in issues:
+        created_at = datetime.datetime.strptime(issue['created_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        closed_at = None
+        if issue['state'] == 'closed' and issue.get('closed_at'):
+            closed_at = datetime.datetime.strptime(issue['closed_at'], "%Y-%m-%dT%H:%M:%S.%fZ")
+        data.append({
+            "title": issue['title'],
+            "created_at": created_at,
+            "closed_at": closed_at,
+            "state": issue["state"],
+            "labels": issue.get("labels", []),
+            "assignee": issue.get("assignee", {}).get("name", "Unassigned"),
+            "reopened": "reopened" in issue.get("labels", []),
+            "type": "Bug" if "bug" in issue.get("labels", []) else "Feature"
+        })
+    return pd.DataFrame(data)
+
+def save_interactive_plot(fig, filename):
+    filepath = os.path.join("reports", filename)
+    fig.write_html(filepath, include_plotlyjs="cdn", full_html=True)
+    return filename
+
+# ────── PLOTLY CHARTS ──────
+
+def plot_bug_vs_feature_chart(df):
+    fig = px.pie(df, names='type', title='Bug vs Feature Distribution')
+    return save_interactive_plot(fig, "bug_vs_feature_chart.html")
+
+def plot_reopen_rate_chart(df):
+    reopened_count = df['reopened'].sum()
+    total = len(df)
+    data = pd.DataFrame({"Status": ["Reopened", "Not Reopened"], "Count": [reopened_count, total - reopened_count]})
+    fig = px.pie(data, names='Status', values='Count', title='Issue Reopen Rate')
+    return save_interactive_plot(fig, "reopen_rate_chart.html")
+
+def plot_component_breakdown(df):
+    labels_expanded = df.explode('labels')
+    fig = px.bar(labels_expanded['labels'].value_counts().reset_index(), x='index', y='labels', title='Component/Module Breakdown', labels={"index": "Label", "labels": "Issue Count"})
+    return save_interactive_plot(fig, "component_breakdown_chart.html")
+
+def plot_average_time_per_assignee(df):
+    df = df.dropna(subset=['closed_at'])
+    df['cycle_time'] = (df['closed_at'] - df['created_at']).dt.days
+    avg_time = df.groupby('assignee')['cycle_time'].mean().reset_index()
+    fig = px.bar(avg_time, x='assignee', y='cycle_time', title='Average Cycle Time per Assignee', labels={"cycle_time": "Days"})
+    return save_interactive_plot(fig, "average_cycle_time_chart.html")
+
+def plot_user_workload(df):
+    workload = df['assignee'].value_counts().reset_index()
+    workload.columns = ['Assignee', 'Issue Count']
+    fig = px.bar(workload, x='Assignee', y='Issue Count', title='User Workload Report')
+    return save_interactive_plot(fig, "user_workload_chart.html")
+
+def plot_cumulative_created_closed(df):
+    df['created_at_date'] = df['created_at'].dt.date
+    df['closed_at_date'] = df['closed_at'].dt.date
+    created = df.groupby('created_at_date').size().cumsum().reset_index(name='Created')
+    closed = df.dropna(subset=['closed_at_date']).groupby('closed_at_date').size().cumsum().reset_index(name='Closed')
+    merged = pd.merge(created, closed, left_on='created_at_date', right_on='closed_at_date', how='outer').fillna(method='ffill').fillna(0)
+    merged['Date'] = merged['created_at_date'].combine_first(merged['closed_at_date'])
+    merged = merged[['Date', 'Created', 'Closed']]
+    fig = px.line(merged, x='Date', y=['Created', 'Closed'], title='Cumulative Created vs Closed Issues')
+    return save_interactive_plot(fig, "created_vs_closed_chart.html")
+
+def plot_issue_age_distribution(df):
+    df['age'] = (datetime.datetime.utcnow() - df['created_at']).dt.days
+    fig = px.histogram(df, x='age', nbins=20, title='Issue Age Distribution', labels={'age': 'Age (Days)'})
+    return save_interactive_plot(fig, "issue_age_distribution_chart.html")
+
+def plot_burndown_chart(df):
+    df['created_at_day'] = df['created_at'].dt.date
+    df['closed_at_day'] = df['closed_at'].dt.date
+    start = df['created_at_day'].min()
+    end = df['closed_at_day'].max()
+    timeline = pd.date_range(start=start, end=end)
+    remaining = []
+    for day in timeline:
+        remaining.append((day, (df['created_at_day'] <= day).sum() - (df['closed_at_day'] <= day).sum()))
+    chart_df = pd.DataFrame(remaining, columns=['Date', 'Remaining Issues'])
+    fig = px.line(chart_df, x='Date', y='Remaining Issues', title='Sprint Burndown Chart')
+    return save_interactive_plot(fig, "burndown_chart.html")
+
+def plot_burnup_chart(df):
+    df['created_at_day'] = df['created_at'].dt.date
+    df['closed_at_day'] = df['closed_at'].dt.date
+    start = df['created_at_day'].min()
+    end = df['closed_at_day'].max()
+    timeline = pd.date_range(start=start, end=end)
+    burnup = []
+    for day in timeline:
+        scope = (df['created_at_day'] <= day).sum()
+        completed = (df['closed_at_day'] <= day).sum()
+        burnup.append((day, scope, completed))
+    chart_df = pd.DataFrame(burnup, columns=['Date', 'Total Scope', 'Completed'])
+    fig = px.line(chart_df, x='Date', y=['Total Scope', 'Completed'], title='Sprint Burnup Chart')
+    return save_interactive_plot(fig, "burnup_chart.html")
+
+def plot_cfd(df):
+    df['created_at_date'] = df['created_at'].dt.date
+    df['closed_at_date'] = df['closed_at'].dt.date
+    timeline = pd.date_range(start=df['created_at_date'].min(), end=datetime.datetime.utcnow().date())
+    cfd_data = []
+    for day in timeline:
+        opened = ((df['created_at_date'] <= day) & ((df['closed_at_date'].isna()) | (df['closed_at_date'] > day))).sum()
+        closed = (df['closed_at_date'] <= day).sum()
+        cfd_data.append((day, opened, closed))
+    cfd_df = pd.DataFrame(cfd_data, columns=['Date', 'Open', 'Closed'])
+    fig = px.area(cfd_df, x='Date', y=['Open', 'Closed'], title='Cumulative Flow Diagram')
+    return save_interactive_plot(fig, "cfd_chart.html")
+
+def plot_velocity_chart(df):
+    closed = df.dropna(subset=['closed_at'])
+    closed['week'] = closed['closed_at'].dt.strftime('%Y-%W')
+    velocity = closed.groupby('week').size().reset_index(name='Completed Issues')
+    fig = px.bar(velocity, x='week', y='Completed Issues', title='Sprint Velocity Chart')
+    return save_interactive_plot(fig, "velocity_chart.html")
+
+def plot_lead_cycle_time(df):
+    df = df.dropna(subset=['closed_at'])
+    df['cycle_time'] = (df['closed_at'] - df['created_at']).dt.days
+    fig = px.histogram(df, x='cycle_time', nbins=20, title='Lead & Cycle Time Histogram', labels={'cycle_time': 'Days'})
+    return save_interactive_plot(fig, "lead_cycle_time_chart.html")
+
+def plot_throughput_chart(df):
+    df = df.dropna(subset=['closed_at'])
+    df['week'] = df['closed_at'].dt.strftime('%Y-%W')
+    throughput = df.groupby('week').size().reset_index(name='Closed Issues')
+    fig = px.bar(throughput, x='week', y='Closed Issues', title='Sprint Throughput Chart')
+    return save_interactive_plot(fig, "throughput_chart.html")
+
+def plot_status_pie(df):
+    fig = px.pie(df, names='state', title='Issue Status Distribution')
+    return save_interactive_plot(fig, "status_pie_chart.html")
+
+def plot_label_distribution(df):
+    labels_expanded = df.explode('labels')
+    label_counts = labels_expanded['labels'].value_counts().reset_index()
+    label_counts.columns = ['Label', 'Count']
+    fig = px.bar(label_counts, x='Label', y='Count', title='Label Distribution Chart')
+    return save_interactive_plot(fig, "label_distribution_chart.html")
+
+# ────── HTML REPORT ──────
+def generate_html_report(images, sprint, df, members):
+    completed = df[df['state'] == 'closed']
+    open_issues = df[df['state'] == 'opened']
+    total = len(df)
+    status_counts = df['state'].value_counts().to_dict()
+
+    team_html = "<ul>"
+    for member in members:
+        team_html += f"<li><strong>{member['name']}</strong> ({member['access_level']})</li>"
+    team_html += "</ul>"
+
+    html = f"""
+    <html>
+    <head>
+        <title>Agile Sprint Report - {sprint['title']}</title>
+        <style>
+            body {{ font-family: Arial; margin: 40px; background: #f4f6f9; color: #2c3e50; }}
+            h1 {{ color: #34495e; }}
+            .sprint-info, .stats, .team {{ background: #ffffff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }}
+            iframe {{ width: 100%; height: 500px; border: none; margin-bottom: 40px; }}
+        </style>
+    </head>
+    <body>
+        <h1>Agile Sprint Report</h1>
+        <div class="sprint-info">
+            <h2>{sprint['title']}</h2>
+            <p><strong>Start Date:</strong> {sprint.get('start_date', 'N/A')}</p>
+            <p><strong>Due Date:</strong> {sprint.get('due_date', 'N/A')}</p>
+            <p><strong>Description:</strong> {sprint.get('description', 'No description')}</p>
+        </div>
+        <div class="stats">
+            <h3>Sprint Summary</h3>
+            <p><strong>Total Issues:</strong> {total}</p>
+            <p><strong>Completed:</strong> {len(completed)}</p>
+            <p><strong>Pending:</strong> {len(open_issues)}</p>
+            <p><strong>Other Status:</strong> {status_counts}</p>
+        </div>
+        <div class="team">
+            <h3>Team Members</h3>
+            {team_html}
+        </div>
+    """
+    for title, chart in images.items():
+        html += f"<h2>{title}</h2><iframe src='{chart}'></iframe>"
+
+    html += "</body></html>"
+    with open("reports/agile_sprint_report.html", "w") as f:
+        f.write(html)
+
+# ────── MAIN FUNCTION ──────
+def main():
+    os.makedirs("reports", exist_ok=True)
+    sprint = get_current_sprint()
+    if not sprint:
+        print("No active sprint found.")
+        return
+    issues = get_issues(sprint)
+    df = process_issues(issues)
+    members = get_members()
+    images = {
+        "Sprint Burndown Chart": plot_burndown_chart(df),
+        "Sprint Burnup Chart": plot_burnup_chart(df),
+        "Cumulative Flow Diagram": plot_cfd(df),
+        "Sprint Velocity Chart": plot_velocity_chart(df),
+        "Lead & Cycle Time Histogram": plot_lead_cycle_time(df),
+        "Sprint Throughput Chart": plot_throughput_chart(df),
+        "Issue Status Pie Chart": plot_status_pie(df),
+        "Label Distribution Chart": plot_label_distribution(df),
+        "Created vs Closed Issues": plot_cumulative_created_closed(df),
+        "Issue Age Distribution": plot_issue_age_distribution(df),
+        "User Workload Report": plot_user_workload(df),
+        "Bug vs Feature Chart": plot_bug_vs_feature_chart(df),
+        "Reopen Rate Chart": plot_reopen_rate_chart(df),
+        "Component Breakdown Chart": plot_component_breakdown(df),
+        "Avg Cycle Time per Assignee": plot_average_time_per_assignee(df)
+    }
+    generate_html_report(images, sprint, df, members)
+
+if __name__ == "__main__":
+    main()
