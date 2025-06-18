@@ -1,0 +1,49 @@
+Test Case Description
+Submit false positive request for a vulnerability with valid reason and required fields
+Try submitting false positive request with missing mandatory fields (e.g., justification)
+Submit false positive for a vulnerability that is already in “Closed” state
+Submit multiple false positive requests for the same vulnerability
+Ensure false positive request is only allowed for eligible states (e.g., "Open", "In Progress")
+Ensure request goes to correct approver based on assignment group
+Approver approves the request – vulnerability state changes to “Closed - False Positive”
+Approver rejects the request – state reverts to previous or stays in “In Progress”
+Approver updates justification – check audit trail/log
+Unauthorized user tries to approve – system blocks action
+Approver takes no action beyond SLA – ensure escalation or notification triggers
+Approver tries to approve already rejected request
+Justification field must have a minimum number of characters
+Inject special characters or scripts in justification to test XSS protection
+Ensure read-only fields (like CVE ID, Assignment Group) remain uneditable
+Edit supporting evidence field during request submission
+Try editing justification after approval/rejection
+On approval, vulnerability state updates to “Closed - False Positive”
+On rejection, vulnerability state remains unchanged or goes to “In Progress”
+Check historical state log after approval/rejection
+State changes without approval – system should block
+Bulk close multiple vulnerabilities with false positive approval – system handles gracefully
+Validate assigned to, reported date, and CVE ID after state transition
+Ensure false positive entries are properly logged in audit/history tables
+Ensure the workflow doesn’t trigger duplicate approval tasks
+False positive data exported in reporting or dashboards
+Submit false positive for vulnerability with missing plugin dependencies
+Email triggered to approver on request submission
+Notification sent to requestor on approval/rejection
+Approver didn’t act within SLA – escalation email sent
+Disable email notification – check suppression logic
+Only users with proper roles can raise false positive
+Unauthorized users try to access or modify false positive request
+Approvers with admin override rejection – check logs
+Read-only access users view request details but cannot modify
+Network glitch during approval submission – check retry behavior
+ServiceNow instance restart during approval
+Concurrent approval and rejection from two users – check data consistency
+Approver user account is deactivated – check reassignment logic
+Workflow changes during active request – ensure rollback or migration
+Link to Security Incident if false positive is part of one
+Revert false positive status manually – verify against audit policy
+Check if automated scanners re-open false positive vulnerabilities
+Validate integration with Tenable/Wiz doesn’t resurface closed false positives
+False positives appear in compliance reports with correct status
+Reports reflect correct closure reason ("False Positive")
+Search filters (e.g., state = false positive) return correct records
+
