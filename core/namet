@@ -1,0 +1,148 @@
+# File 1: honeypot_manager.py
+import os
+import json
+import logging
+import datetime
+import csv
+import threading
+from flask import Flask, request, abort
+from apscheduler.schedulers.background import BackgroundScheduler
+from openai import AzureOpenAI
+
+# Configuration
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
+DEPLOYMENT_NAME = "gpt-4-turbo"
+LURE_DIR = "lures"
+LOG_FILE = "honeypot_attacks.csv"
+TOP_HONEYPOTS = [
+    "ssh", "ftp", "http", "https", "smb", "rdp", "mysql", "telnet", 
+    "vnc", "smtp", "redis", "elasticsearch", "mongodb", "postgresql",
+    "kubernetes", "docker", "jenkins", "gitlab", "wordpress", "weblogic"
+]
+
+# Initialize
+os.makedirs(LURE_DIR, exist_ok=True)
+app = Flask(__name__)
+current_lures = {}
+ai_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_KEY,
+    api_version="2024-02-15-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT
+)
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('honeypot')
+file_handler = logging.FileHandler('honeypot_operations.log')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
+def generate_lure(service: str) -> str:
+    """Generate AI-powered lure using Azure OpenAI"""
+    system_prompt = (
+        "You are a cybersecurity honeypot designer. Create realistic but fake service responses "
+        "that appear legitimate to attackers. Include vulnerabilities that seem exploitable but are traps."
+    )
+    
+    user_prompt = f"""
+    Generate a deception lure for a {service.upper()} honeypot service. Include:
+    1. Service banner/header with fake version info
+    2. Authentication prompt or fake credentials
+    3. One seemingly critical vulnerability mention
+    4. Realistic error messages or help text
+    5. Format appropriate for the protocol (text-based)
+    
+    Make it convincing for professional attackers.
+    """
+    
+    response = ai_client.chat.completions.create(
+        model=DEPLOYMENT_NAME,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0.85,
+        max_tokens=500
+    )
+    
+    return response.choices[0].message.content.strip()
+
+def update_lures():
+    """Generate and refresh all lures without restart"""
+    global current_lures
+    logger.info("Starting scheduled lure update")
+    
+    new_lures = {}
+    for service in TOP_HONEYPOTS:
+        try:
+            content = generate_lure(service)
+            new_lures[service] = content
+            logger.info(f"Generated new lure for {service}")
+        except Exception as e:
+            logger.error(f"Failed to generate {service} lure: {str(e)}")
+            # Preserve existing lure if generation fails
+            if service in current_lures:
+                new_lures[service] = current_lures[service]
+    
+    current_lures = new_lures
+    logger.info("Lure update completed successfully")
+    
+    # Save to manifest
+    with open(os.path.join(LURE_DIR, "manifest.json"), "w") as f:
+        json.dump({
+            "last_updated": datetime.datetime.now().isoformat(),
+            "services": list(new_lures.keys())
+        }, f)
+
+def log_attack(service, client_ip, user_agent, payload):
+    """Log attack attempts to CSV"""
+    with open(LOG_FILE, "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            datetime.datetime.now().isoformat(),
+            service,
+            client_ip,
+            user_agent,
+            payload[:500]  # Truncate large payloads
+        ])
+    logger.warning(f"Attack detected on {service} from {client_ip}")
+
+def init_lures():
+    """Initial lure generation"""
+    global current_lures
+    if not current_lures:
+        update_lures()
+
+# Flask Endpoints
+@app.route('/<service>', methods=['GET', 'POST'])
+def honeypot(service):
+    if service not in current_lures:
+        abort(404)
+    
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+    
+    # Capture payload
+    payload = ""
+    if request.method == 'POST':
+        payload = str(request.form)
+    elif request.query_string:
+        payload = request.query_string.decode('utf-8')
+    
+    # Log attack
+    log_attack(service, client_ip, user_agent, payload)
+    
+    # Return dynamically generated lure
+    return current_lures[service], 200, {'Content-Type': 'text/plain'}
+
+# Scheduler Setup
+scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(update_lures, 'interval', hours=6)
+scheduler.start()
+
+# Initialization
+if __name__ == '__main__':
+    init_lures()
+    logger.info("Honeypot service starting with scheduled lure updates")
+    app.run(host='0.0.0.0', port=8080, use_reloader=False)
