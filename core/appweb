@@ -1,0 +1,58 @@
+from flask import Flask, request
+from loguru import logger
+from apscheduler.schedulers.background import BackgroundScheduler
+import random
+import string
+import json
+import requests
+from pathlib import Path
+
+app = Flask(__name__)
+log_file = "honeypot.log"
+endpoint_config_path = Path("endpoint_config.json")
+logger.add(log_file, format="{time} {level} {message}", level="INFO")
+
+
+# ------------------ Dynamic Endpoint ------------------ #
+def generate_random_path():
+    return "/api/admin/" + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+
+
+def update_fake_endpoint():
+    new_path = generate_random_path()
+    with endpoint_config_path.open("w") as f:
+        json.dump({"path": new_path}, f)
+    logger.info(f"🔁 Updated fake endpoint to: {new_path}")
+    return new_path
+
+
+# Initialize with first path
+if not endpoint_config_path.exists():
+    update_fake_endpoint()
+
+
+# ------------------ Honeypot Route ------------------ #
+@app.before_request
+def catch_dynamic_route():
+    with endpoint_config_path.open() as f:
+        current_path = json.load(f).get("path")
+
+    if request.path == current_path:
+        attacker_ip = request.remote_addr
+        user_agent = request.headers.get('User-Agent')
+        method = request.method
+        data = request.get_data(as_text=True)
+
+        logger.info(
+            f"LURES ATTEMPTED | Type : ADMIN-API Lures  | IP: {attacker_ip}  | UA: {user_agent} | METHOD: {method} | PATH: {request.path} | DATA: {data}")
+        return {"error": "Unauthorized access attempt logged."}, 403
+
+
+# ------------------ Scheduler ------------------ #
+scheduler = BackgroundScheduler()
+scheduler.add_job(update_fake_endpoint, "interval", minutes=1)
+scheduler.start()
+
+# ------------------ Main ------------------ #
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
