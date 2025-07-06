@@ -1,0 +1,90 @@
+import os
+import json
+import random
+import string
+from flask import Flask, request, jsonify
+from loguru import logger
+from apscheduler.schedulers.background import BackgroundScheduler
+import requests
+import openai
+from pathlib import Path
+
+# Setup Flask and Logging
+app = Flask(__name__)
+logger.add("honeypot.log", format="{time} {level} {message}", level="INFO")
+
+# Azure OpenAI setup
+openai.api_key = os.getenv("AZURE_OPENAI_API_KEY")
+openai.api_base = os.getenv("AZURE_OPENAI_ENDPOINT")
+openai.api_type = "azure"
+openai.api_version = "2023-05-15"
+DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+
+# Output files
+CONFIG_FILE = Path("fake_config.json")
+USER_FILE = Path("fake_users.json")
+
+
+# Generate fake config
+def generate_fake_config():
+    prompt = "Generate a fake JSON server config file with keys like 'db_host', 'db_user', 'api_key', and 'feature_flags'."
+    response = openai.ChatCompletion.create(
+        engine=DEPLOYMENT_NAME,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=150
+    )
+    try:
+        text = response['choices'][0]['message']['content']
+        CONFIG_FILE.write_text(text)
+        logger.info("✅ Generated new fake config file.")
+    except Exception as e:
+        logger.error(f"❌ Failed to generate config: {e}")
+
+# Generate fake users
+def generate_fake_users():
+    prompt = "Generate a fake JSON list of 5 users with fields: id, username, email, role, created_at."
+    response = openai.ChatCompletion.create(
+        engine=DEPLOYMENT_NAME,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=200
+    )
+    try:
+        text = response['choices'][0]['message']['content']
+        USER_FILE.write_text(text)
+        logger.info("✅ Generated new fake user file.")
+    except Exception as e:
+        logger.error(f"❌ Failed to generate users: {e}")
+
+# Schedule fake data generation
+scheduler = BackgroundScheduler()
+scheduler.add_job(generate_fake_config, "interval", minutes=5)
+scheduler.add_job(generate_fake_users, "interval", minutes=5)
+scheduler.start()
+
+# First-time generation
+generate_fake_config()
+generate_fake_users()
+
+# API endpoint: Fake config
+@app.route("/api/config", methods=["GET"])
+def fake_config_api():
+    attacker_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent')
+    geoip = get_geoip_info(attacker_ip)
+    logger.info(f"🚨 ATTEMPT | IP: {attacker_ip} | GEO: {geoip} | UA: {user_agent} | PATH: /api/config")
+    return jsonify(json.loads(CONFIG_FILE.read_text()))
+
+# API endpoint: Fake users
+@app.route("/api/users", methods=["GET"])
+def fake_users_api():
+    attacker_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent')
+    geoip = get_geoip_info(attacker_ip)
+    logger.info(f"🚨 ATTEMPT | IP: {attacker_ip} | GEO: {geoip} | UA: {user_agent} | PATH: /api/users")
+    return jsonify(json.loads(USER_FILE.read_text()))
+
+# Run Flask app
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
