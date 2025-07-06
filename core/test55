@@ -1,0 +1,60 @@
+from flask import Flask, request, jsonify
+from flask_apscheduler import APScheduler
+from honeypot_generator import generate_admin_api_lure
+import logging
+import uuid
+from pytz import utc  # <-- Use UTC timezone
+
+app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+
+# ---- Config for APScheduler with UTC ----
+class Config:
+    SCHEDULER_API_ENABLED = True
+    SCHEDULER_TIMEZONE = 'UTC'  # <-- Set UTC timezone here
+
+app.config.from_object(Config())
+
+scheduler = APScheduler(timezone=utc)  # <-- Set timezone for scheduler
+scheduler.init_app(app)
+scheduler.start()
+
+HONEYPOT_ROUTES = {}
+
+@app.route("/")
+def index():
+    return "🛡️ GenAI Honeypot Admin API Server Running in UTC!"
+
+@app.route("/honeypots")
+def list_honeypots():
+    return jsonify(list(HONEYPOT_ROUTES.keys()))
+
+# --- Function to dynamically add honeypot route ---
+def create_honeypot_route(path):
+    def honeypot():
+        ip = request.remote_addr
+        logging.warning(f"🔥 Honeypot triggered at {path} from IP: {ip}")
+        return jsonify({
+            "error": "Unauthorized access attempt logged.",
+            "honeypot_id": HONEYPOT_ROUTES[path]
+        }), 403
+
+    endpoint = f"honeypot_{uuid.uuid4().hex[:8]}"
+    app.add_url_rule(path, endpoint, honeypot, methods=["GET", "POST"])
+    HONEYPOT_ROUTES[path] = endpoint
+    logging.info(f"✅ Honeypot created: {path} -> {endpoint}")
+
+# --- Scheduler job using UTC ---
+@scheduler.task('interval', id='generate_honeypot', minutes=10, timezone='UTC')
+def generate_and_add_honeypot():
+    try:
+        path = generate_admin_api_lure()
+        if path not in HONEYPOT_ROUTES:
+            create_honeypot_route(path)
+        else:
+            logging.info(f"🚫 Honeypot path already exists: {path}")
+    except Exception as e:
+        logging.error(f"❌ Failed to create honeypot: {e}")
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
