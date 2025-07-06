@@ -1,0 +1,137 @@
+Test-
+app.py
+
+from flask import Flask, request, jsonify
+from datetime import datetime
+import json
+import logging
+import os
+import openai
+
+app = Flask(__name__)
+
+# Setup logging
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+logging.basicConfig(filename="logs/honeypot.log", level=logging.INFO)
+
+# Dummy lure config loading
+def load_lures():
+    with open("config/lures.json", "r") as f:
+        return json.load(f)
+
+# Endpoint: Dummy Admin Login Honeypot
+@app.route("/admin-login", methods=["POST"])
+def admin_login():
+    data = request.get_json()
+    logging.info(f"ADMIN_LOGIN_ATTEMPT | IP: {request.remote_addr} | Data: {data} | Time: {datetime.utcnow()}")
+    return jsonify({"status": "unauthorized", "message": "Honeypot triggered!"}), 401
+
+# Endpoint: View All Lures
+@app.route("/lures", methods=["GET"])
+def get_lures():
+    return jsonify(load_lures())
+
+# Endpoint: Add new lure dynamically
+@app.route("/add-lure", methods=["POST"])
+def add_lure():
+    new_lure = request.get_json()
+    lures = load_lures()
+    lures.append(new_lure)
+    with open("config/lures.json", "w") as f:
+        json.dump(lures, f, indent=4)
+    logging.info(f"LURE_ADDED | {new_lure['type']} | {datetime.utcnow()}")
+    return jsonify({"status": "success", "message": "Lure added."})
+
+if __name__ == "__main__":
+    app.run(debug=True)
+------------
+lure.pyy
+
+
+import openai
+import json
+import os
+import time
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+
+# Azure OpenAI setup
+openai.api_type = "azure"
+openai.api_base = os.getenv("AZURE_OPENAI_ENDPOINT", "https://your-endpoint.openai.azure.com/")
+openai.api_version = "2023-05-15"
+openai.api_key = os.getenv("AZURE_OPENAI_KEY", "your-azure-api-key")
+
+deployment_id = os.getenv("AZURE_DEPLOYMENT_ID", "gpt-35-turbo")
+
+GENAI_PROMPTS = [
+    "Generate a fake admin login form HTML with realistic field names.",
+    "Create a fake payment gateway form capturing card number, CVV.",
+    "Simulate a fake database endpoint JSON with credentials inside.",
+    "Generate a decoy config.yaml file containing fake API secrets.",
+    "Write a fake AWS credentials file used in development.",
+    "Create a realistic phishing page for Office 365 login.",
+    "Generate logs of suspicious login attempts from foreign IPs.",
+    "Produce a fake SSH private key named id_rsa with dummy data.",
+    "Simulate a Kubernetes secret YAML with encoded passwords.",
+    "Generate a fake internal email chain discussing data breaches."
+]
+
+OUTPUT_DIR = "config/generated_lures"
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+
+
+def generate_lures():
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    for i, prompt in enumerate(GENAI_PROMPTS):
+        try:
+            response = openai.ChatCompletion.create(
+                engine=deployment_id,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=400
+            )
+            lure_text = response['choices'][0]['message']['content']
+            filename = f"lure_{i + 1}_{timestamp}.txt"
+            with open(os.path.join(OUTPUT_DIR, filename), "w") as f:
+                f.write(f"Prompt: {prompt}\n\n{lure_text}")
+            print(f"Lure generated: {filename}")
+        except Exception as e:
+            print(f"Error generating lure {i + 1}: {e}")
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(generate_lures, "interval", hours=1)
+scheduler.start()
+
+# For standalone running
+if __name__ == "__main__":
+    print("Starting GenAI Lure Generator... Press Ctrl+C to stop.")
+    try:
+        while True:
+            time.sleep(60)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
+----------
+
+dashboard.py
+
+import streamlit as st
+import pandas as pd
+
+LOG_FILE = "../logs/honeypot.log"
+
+st.title("🛡️ Honeypot Activity Dashboard")
+
+def load_logs():
+    with open(LOG_FILE, "r") as f:
+        lines = f.readlines()
+    data = [line.split("|") for line in lines if "HONEYPOT" not in line]
+    return pd.DataFrame(data, columns=["Event", "IP", "Data", "Time"])
+
+try:
+    df = load_logs()
+    st.dataframe(df)
+except Exception as e:
+    st.error(f"Error loading logs: {e}")
