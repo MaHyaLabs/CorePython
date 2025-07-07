@@ -1,0 +1,58 @@
+from faker import Faker
+import random
+
+fake = Faker()
+
+def generate_fake_credentials():
+    return {"username": fake.user_name(), "password": fake.password()}
+
+def generate_fake_aws_keys():
+    return {
+        "AWSAccessKeyId": "AKIA" + ''.join(random.choices("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=16)),
+        "AWSSecretKey": ''.join(random.choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/+", k=40))
+    }
+
+def generate_fake_credit_card():
+    return {
+        "card_number": fake.credit_card_number(),
+        "expiry": fake.credit_card_expire(),
+        "cvv": fake.credit_card_security_code()
+    }
+
+def generate_fake_admin_panel():
+    return f"<html><h1>Admin Panel</h1><p>Username: {fake.user_name()}<br>Password: {fake.password()}</p></html>"
+
+def generate_fake_email():
+    return {
+        "from": fake.email(),
+        "to": fake.email(),
+        "subject": fake.sentence(),
+        "body": fake.paragraph(nb_sentences=5)
+    }
+
+def generate_fake_ai_model_code():
+    return '''
+import torch
+def fake_model(x):
+    return torch.sigmoid(x)
+'''
+
+def generate_fake_ml_dataset():
+    return {
+        "features": [[random.random() for _ in range(5)] for _ in range(10)],
+        "labels": [random.randint(0,1) for _ in range(10)]
+    }
+
+def generate_fake_image_description():
+    return fake.text(max_nb_chars=200)
+
+def generate_fake_api_doc():
+    return {
+        "endpoint": "/api/v1/infer",
+        "method": "POST",
+        "payload": {"input": "string"},
+        "description": "Fake AI inference endpoint"
+    }
+
+def generate_fake_openai_key():
+    return "sk-" + ''.join(random.choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=48))
