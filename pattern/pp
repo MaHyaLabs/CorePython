@@ -1,0 +1,26 @@
+# Convert this Django project code to use the Flask framework.
+# Replace Django-specific imports, views, models, routing, and settings with Flask equivalents.
+# Key conversion points:
+# - Replace 'django.urls' and 'urlpatterns' with Flask route decorators.
+# - Replace Django views (class-based or function-based) with Flask route functions.
+# - Replace Django ORM models with SQLAlchemy models if needed.
+# - Replace Django templates (render with context) with Flask's `render_template`.
+# - Replace settings.py and wsgi.py with appropriate Flask app initialization.
+# - Remove middleware and Django-specific decorators or replace with Flask-compatible ones.
+
+# Use Flask best practices for folder structure and configuration.
+# Ensure the converted code runs independently without Django dependencies.
+
+# Begin code conversion below:
+
+
+....
+
+
+
+# Convert this Django views.py file to Flask.
+# Replace @login_required decorators with Flask-Login.
+# Replace HttpResponse and render() with Flask equivalents.
+# Preserve route logic and context passing.
+
+...
