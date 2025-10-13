@@ -1,0 +1,41 @@
+let
+    // Function: Returns "Yes" if attachments found in issue description or notes
+    GetGitLabIssueAttachmentFlag = (issueUrl as text) as text =>
+    let
+        // 🧩 Extract project path and issue ID
+        parts = Text.Split(issueUrl, "/"),
+        issueNumber = try List.Last(parts) otherwise null,
+        issueIndex = List.PositionOf(parts, "-"),
+        projectPath = if issueIndex > 0 then Text.Combine(List.FirstN(parts, issueIndex), "/") else null,
+
+        // 🧩 GitLab API endpoints
+        apiBase = "https://gitlab.com/api/v4/projects/",
+        encodedProject = Uri.EscapeDataString(projectPath),
+        issueAPI = apiBase & encodedProject & "/issues/" & issueNumber,
+        notesAPI = apiBase & encodedProject & "/issues/" & issueNumber & "/notes",
+
+        // 🪪 Authorization Header
+        token = GitLabToken,
+        headers = [
+            #"Authorization" = "Bearer " & token,
+            #"User-Agent" = "PowerBI-GitLabClient"
+        ],
+
+        // 🧠 Get Issue Details
+        issueResponse = try Json.Document(Web.Contents(issueAPI, [Headers=headers])) otherwise null,
+
+        // 🧠 Get Issue Notes (comments)
+        notesResponse = try Json.Document(Web.Contents(notesAPI, [Headers=headers])) otherwise {},
+
+        // 🔍 Combine all text to search for attachments
+        descText = if issueResponse <> null then issueResponse[description] else "",
+        notesText = Text.Combine(List.Transform(notesResponse, each try _[body] otherwise ""), " "),
+        combinedText = Text.Lower(descText & " " & notesText),
+
+        // 🧷 Check if any file upload pattern exists
+        hasUploads =
+            if Text.Contains(combinedText, "uploads/") then "Yes" else "No"
+    in
+        hasUploads
+in
+    GetGitLabIssueAttachmentFlag
