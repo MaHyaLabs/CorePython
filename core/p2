@@ -1,0 +1,54 @@
+let
+    // Function to return "Yes" if attachments exist, else "No"
+    GetSelfHostedGitLabIssueAttachmentFlag = (issueUrl as text) as text =>
+    let
+        // 🔹 Split URL into parts
+        parts = Text.Split(issueUrl, "/"),
+
+        // Find position of the "-" (marks start of "/-/issues")
+        dashIndex = List.PositionOf(parts, "-"),
+
+        // Extract issue ID (last element)
+        issueNumber = try List.Last(parts) otherwise null,
+
+        // Extract project path: everything between domain and "/-"
+        projectParts =
+            if dashIndex > 0 then
+                List.Range(parts, 3, dashIndex - 3)
+            else
+                {},
+
+        projectPath = Text.Combine(projectParts, "/"),
+
+        // 🔹 Build self-hosted base API URL automatically
+        baseUrl = Text.Combine(List.FirstN(parts, 3), "/"),           // e.g., https://gitlab.company.com
+        apiBase = baseUrl & "/api/v4/projects/",
+        encodedProject = Uri.EscapeDataString(projectPath),
+
+        // 🔹 Build full API endpoints
+        issueAPI = apiBase & encodedProject & "/issues/" & issueNumber,
+        notesAPI = apiBase & encodedProject & "/issues/" & issueNumber & "/notes",
+
+        // 🔹 Auth header using Power BI parameter
+        token = GitLabToken,
+        headers = [
+            #"Authorization" = "Bearer " & token,
+            #"User-Agent"   = "PowerBI-GitLabClient"
+        ],
+
+        // 🔹 Fetch issue + notes
+        issueResponse = try Json.Document(Web.Contents(issueAPI, [Headers=headers])) otherwise null,
+        notesResponse = try Json.Document(Web.Contents(notesAPI, [Headers=headers])) otherwise {},
+
+        // 🔹 Combine all text
+        descText  = if issueResponse <> null then issueResponse[description] else "",
+        notesText = Text.Combine(List.Transform(notesResponse, each try _[body] otherwise ""), " "),
+        combinedText = Text.Lower(descText & " " & notesText),
+
+        // 🔹 Detect any file upload patterns
+        hasUploads =
+            if Text.Contains(combinedText, "uploads/") then "Yes" else "No"
+    in
+        hasUploads
+in
+    GetSelfHostedGitLabIssueAttachmentFlag
