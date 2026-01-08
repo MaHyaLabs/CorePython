@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""
+Robot Framework Listener with log4j-style console logging
+"""
+
+import sys
+import time
+import datetime
+import threading
+from robot.api import SuiteVisitor
+from robot.api.interfaces import ListenerV3
+from robot.running.model import TestSuite
+from robot import version as robot_version
+
+class Log4jStyleListener(ListenerV3):
+    """Robot Framework listener with log4j-style console logging"""
+    
+    ROBOT_LISTENER_API_VERSION = 3
+    
+    def __init__(self):
+        super().__init__()
+        self.start_time = None
+        self.suite_start_time = None
+        self.test_start_time = None
+        self.execution_id = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.test_count = 0
+        self.passed_count = 0
+        self.failed_count = 0
+        self.skipped_count = 0
+        self.current_suite = None
+        self.test_results = []
+        self._lock = threading.Lock()
+        
+    # ========== HELPER METHODS ==========
+    
+    def _print_separator(self, char='=', length=100):
+        """Print separator line"""
+        print(f"\n{char * length}\n")
+    
+    def _log(self, level, event, message, suite_name="", test_name=""):
+        """Log4j-style logging format"""
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+        thread_id = threading.get_ident()
+        
+        # Format based on level
+        level_formats = {
+            'INFO': '\033[94mINFO\033[0m',     # Blue
+            'DEBUG': '\033[90mDEBUG\033[0m',   # Gray
+            'WARN': '\033[93mWARN\033[0m',     # Yellow
+            'ERROR': '\033[91mERROR\033[0m',   # Red
+            'START': '\033[92mSTART\033[0m',   # Green
+            'END': '\033[92mEND\033[0m',       # Green
+        }
+        
+        level_display = level_formats.get(level, level)
+        
+        # Create context info
+        context = []
+        if suite_name:
+            context.append(f"Suite: {suite_name}")
+        if test_name:
+            context.append(f"Test: {test_name}")
+        context_str = f" [{', '.join(context)}]" if context else ""
+        
+        log_line = f"{timestamp} {level_display} [{thread_id}] {event}{context_str} - {message}"
+        print(log_line)
+    
+    def _print_execution_header(self):
+        """Print execution header with system information"""
+        self._print_separator('=')
+        
+        # ASCII Art Header
+        print("\033[1;36m" + """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ROBOT FRAMEWORK EXECUTION LISTENER                        ║
+║                      with Log4j-style Console Logging                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        """ + "\033[0m")
+        
+        # System Information Table
+        print("\033[1;34m" + "=" * 80 + "\033[0m")
+        print("\033[1;33mEXECUTION INFORMATION:\033[0m")
+        print("\033[1;34m" + "-" * 80 + "\033[0m")
+        
+        import platform
+        info = [
+            ("Execution ID", self.execution_id),
+            ("Start Time", datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            ("Python Version", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"),
+            ("Robot Framework Version", robot_version.VERSION),
+            ("Platform", f"{platform.system()} {platform.release()}"),
+            ("Python Executable", sys.executable),
+            ("Working Directory", platform.node()),
+        ]
+        
+        for key, value in info:
+            print(f"\033[96m{key:30}\033[0m: \033[97m{value}\033[0m")
+        
+        print("\033[1;34m" + "=" * 80 + "\033[0m")
+        self._print_separator()
+    
+    def _print_execution_summary(self):
+        """Print execution summary table"""
+        self._print_separator('=')
+        
+        print("\033[1;35m" + """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         EXECUTION SUMMARY REPORT                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        """ + "\033[0m")
+        
+        # Summary Statistics
+        print("\033[1;34m" + "=" * 100 + "\033[0m")
+        print("\033[1;33mTEST EXECUTION SUMMARY:\033[0m")
+        print("\033[1;34m" + "-" * 100 + "\033[0m")
+        
+        total_time = time.time() - self.start_time
+        hours, remainder = divmod(total_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        summary_info = [
+            ("Total Tests", str(self.test_count)),
+            ("Passed", f"\033[92m{self.passed_count}\033[0m"),
+            ("Failed", f"\033[91m{self.failed_count}\033[0m"),
+            ("Skipped", f"\033[93m{self.skipped_count}\033[0m"),
+            ("Pass Rate", f"{((self.passed_count/self.test_count)*100 if self.test_count > 0 else 0):.1f}%"),
+            ("Total Time", f"{int(hours):02d}:{int(minutes):02d}:{seconds:06.3f}"),
+            ("Execution ID", self.execution_id),
+            ("End Time", datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        ]
+        
+        for key, value in summary_info:
+            print(f"\033[96m{key:20}\033[0m: \033[97m{value}\033[0m")
+        
+        print("\033[1;34m" + "-" * 100 + "\033[0m")
+        
+        # Detailed Test Results Table
+        if self.test_results:
+            print("\n\033[1;33mDETAILED TEST RESULTS:\033[0m")
+            print("\033[1;34m" + "-" * 100 + "\033[0m")
+            print(f"\033[96m{'Test No.':8} {'Test Name':40} {'Status':12} {'Elapsed Time':15} {'Suite':25}\033[0m")
+            print("\033[1;34m" + "-" * 100 + "\033[0m")
+            
+            for idx, result in enumerate(self.test_results, 1):
+                test_name = result['name']
+                status = result['status']
+                elapsed = result['elapsed']
+                suite = result['suite']
+                
+                # Color code status
+                if status == 'PASS':
+                    status_display = f"\033[92m{status:12}\033[0m"
+                elif status == 'FAIL':
+                    status_display = f"\033[91m{status:12}\033[0m"
+                else:
+                    status_display = f"\033[93m{status:12}\033[0m"
+                
+                print(f"\033[97m{idx:8} {test_name[:38]:40} {status_display} {elapsed:15} {suite[:23]:25}\033[0m")
+        
+        print("\033[1;34m" + "=" * 100 + "\033[0m")
+    
+    # ========== ROBOT LISTENER EVENTS ==========
+    
+    def start_suite(self, suite, result):
+        """Called when a suite starts"""
+        self.current_suite = suite.name
+        if not self.start_time:
+            self.start_time = time.time()
+            self._print_execution_header()
+        
+        self.suite_start_time = time.time()
+        self._log('START', 'SUITE_START', 
+                  f"Starting suite: {suite.name} (id: {suite.id})",
+                  suite_name=suite.name)
+        
+        # Log suite metadata
+        if hasattr(suite, 'metadata') and suite.metadata:
+            for key, value in suite.metadata.items():
+                self._log('DEBUG', 'SUITE_METADATA', 
+                         f"{key}: {value}",
+                         suite_name=suite.name)
+    
+    def end_suite(self, suite, result):
+        """Called when a suite ends"""
+        elapsed = time.time() - self.suite_start_time
+        self._log('END', 'SUITE_END', 
+                  f"Suite completed: {suite.name} | "
+                  f"Status: {result.status} | "
+                  f"Elapsed: {elapsed:.3f}s | "
+                  f"Tests: {result.test_count} | "
+                  f"Passed: {result.pass_count} | "
+                  f"Failed: {result.fail_count} | "
+                  f"Skipped: {result.skip_count}",
+                  suite_name=suite.name)
+        self._print_separator('-')
+    
+    def start_test(self, test, result):
+        """Called when a test starts"""
+        self.test_start_time = time.time()
+        self.test_count += 1
+        self._log('START', 'TEST_START', 
+                  f"Starting test: {test.name} | "
+                  f"Tags: {', '.join(test.tags) if test.tags else 'No tags'}",
+                  suite_name=self.current_suite,
+                  test_name=test.name)
+    
+    def end_test(self, test, result):
+        """Called when a test ends"""
+        elapsed = time.time() - self.test_start_time
+        
+        # Update counters
+        with self._lock:
+            if result.status == 'PASS':
+                self.passed_count += 1
+            elif result.status == 'FAIL':
+                self.failed_count += 1
+            else:
+                self.skipped_count += 1
+            
+            # Store result for summary
+            self.test_results.append({
+                'name': test.name,
+                'status': result.status,
+                'elapsed': f"{elapsed:.3f}s",
+                'suite': self.current_suite
+            })
+        
+        # Color code based on status
+        if result.status == 'PASS':
+            status_color = '\033[92m'  # Green
+        elif result.status == 'FAIL':
+            status_color = '\033[91m'  # Red
+        else:
+            status_color = '\033[93m'  # Yellow
+        
+        self._log('END', 'TEST_END', 
+                  f"Test completed: {test.name} | "
+                  f"Status: {status_color}{result.status}\033[0m | "
+                  f"Elapsed: {elapsed:.3f}s | "
+                  f"Message: {result.message[:100] if result.message else 'No message'}",
+                  suite_name=self.current_suite,
+                  test_name=test.name)
+    
+    def log_message(self, message):
+        """Called when a log message is emitted"""
+        level_map = {
+            'TRACE': 'DEBUG',
+            'DEBUG': 'DEBUG',
+            'INFO': 'INFO',
+            'WARN': 'WARN',
+            'ERROR': 'ERROR',
+        }
+        
+        log_level = level_map.get(message.level, 'INFO')
+        self._log(log_level, 'LOG_MESSAGE', 
+                  message.message,
+                  suite_name=self.current_suite)
+    
+    def message(self, message):
+        """Called when a framework message is emitted"""
+        self._log('INFO', 'FRAMEWORK_MESSAGE', 
+                  message.message,
+                  suite_name=self.current_suite)
+    
+    def library_import(self, name, attributes):
+        """Called when a library is imported"""
+        self._log('INFO', 'LIBRARY_IMPORT', 
+                  f"Library imported: {name} | "
+                  f"Version: {attributes.get('version', 'N/A')} | "
+                  f"Scope: {attributes.get('scope', 'N/A')}",
+                  suite_name=self.current_suite)
+    
+    def resource_import(self, name, attributes):
+        """Called when a resource file is imported"""
+        self._log('INFO', 'RESOURCE_IMPORT', 
+                  f"Resource imported: {name}",
+                  suite_name=self.current_suite)
+    
+    def variables_import(self, name, attributes):
+        """Called when a variables file is imported"""
+        self._log('INFO', 'VARIABLES_IMPORT', 
+                  f"Variables imported: {name}",
+                  suite_name=self.current_suite)
+    
+    def output_file(self, path):
+        """Called when output file is created"""
+        self._log('INFO', 'OUTPUT_FILE', 
+                  f"Output file created: {path}")
+    
+    def log_file(self, path):
+        """Called when log file is created"""
+        self._log('INFO', 'LOG_FILE', 
+                  f"Log file created: {path}")
+    
+    def report_file(self, path):
+        """Called when report file is created"""
+        self._log('INFO', 'REPORT_FILE', 
+                  f"Report file created: {path}")
+    
+    def xunit_file(self, path):
+        """Called when xunit file is created"""
+        self._log('INFO', 'XUNIT_FILE', 
+                  f"XUnit file created: {path}")
+    
+    def debug_file(self, path):
+        """Called when debug file is created"""
+        self._log('DEBUG', 'DEBUG_FILE', 
+                  f"Debug file created: {path}")
+    
+    def close(self):
+        """Called when the entire execution ends"""
+        self._print_execution_summary()
+        self._log('INFO', 'EXECUTION_COMPLETE', 
+                  "Robot Framework execution completed successfully")
+        self._print_separator('=')
