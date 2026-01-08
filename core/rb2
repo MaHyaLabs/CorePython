@@ -1,0 +1,204 @@
+Here's a complete prompt you can use with another AI tool to generate the exact same Robot Framework listener with log4j-style logging:
+
+---
+
+Complete Prompt for AI Tool
+
+"I need a comprehensive Robot Framework listener in Python that logs execution events in log4j-style format. Please generate complete working code with these specific requirements:
+
+CORE REQUIREMENTS:
+
+1. Listener Structure:
+   · Implement as ListenerV3 with ROBOT_LISTENER_API_VERSION = 3
+   · Name the class Log4jStyleListener
+   · Use proper imports: sys, time, datetime, threading, robot.api, robot.api.interfaces, robot.running.model, robot.version
+2. Log4j Formatting:
+   · Each log line must follow: TIMESTAMP LEVEL [THREAD_ID] EVENT [CONTEXT] - MESSAGE
+   · Timestamp format: YYYY-MM-DD HH:MM:SS,mmm (3-digit milliseconds)
+   · Color-coded levels using ANSI codes:
+     · INFO: blue (\033[94m)
+     · DEBUG: gray (\033[90m)
+     · WARN: yellow (\033[93m)
+     · ERROR: red (\033[91m)
+     · START/END: green (\033[92m)
+   · Thread ID from threading.get_ident()
+   · Context should show suite name and test name when available
+3. Execution Header (Start of Run):
+   · Print separator line: = repeated 100 times
+   · ASCII art box with title: "ROBOT FRAMEWORK EXECUTION LISTENER with Log4j-style Console Logging"
+   · Information table with these exact headers:
+     · Execution ID (format: YYYYMMDD_HHMMSS)
+     · Start Time
+     · Python Version (from sys.version_info)
+     · Robot Framework Version (from robot.version.VERSION)
+     · Platform (OS and release from platform)
+     · Python Executable (from sys.executable)
+     · Working Directory (from platform.node())
+   · All table values must be properly aligned in 2 columns
+4. Execution Separation:
+   · Between major events, print separator: - repeated 100 times
+   · Between test cases, use thinner separator for visual grouping
+   · At very start and end, use = separator
+5. Event Logging for ALL Events:
+   Must implement these methods with detailed logging:
+   · start_suite: Log suite start with ID, metadata
+   · end_suite: Log completion with status, elapsed time, test counts
+   · start_test: Log test start with tags
+   · end_test: Log test end with status (colored), elapsed time, message
+   · log_message: Map Robot levels (TRACE→DEBUG, DEBUG→DEBUG, INFO→INFO, WARN→WARN, ERROR→ERROR)
+   · message: Framework messages
+   · library_import: Library name, version, scope
+   · resource_import: Resource file imports
+   · variables_import: Variables file imports
+   · output_file, log_file, report_file, xunit_file, debug_file: File creation events
+   · close: Final execution completion
+6. Execution Summary (End of Run):
+   · Print separator line with =
+   · ASCII art box: "EXECUTION SUMMARY REPORT"
+   · Summary statistics table with:
+     · Total Tests
+     · Passed (green), Failed (red), Skipped (yellow) - colored counts
+     · Pass Rate (percentage)
+     · Total Time (formatted as HH:MM:SS.sss)
+     · Execution ID
+     · End Time
+   · Detailed results table with columns:
+     · Test No. (1-based index)
+     · Test Name (truncated to 40 chars)
+     · Status (12 chars, colored: PASS-green, FAIL-red, SKIP-yellow)
+     · Elapsed Time (15 chars, format: X.XXXs)
+     · Suite (truncated to 25 chars)
+   · Table must show all tests executed in order
+7. Tracking & Statistics:
+   · Count total tests, passed, failed, skipped
+   · Track elapsed time for each test and suite
+   · Store results for summary display
+   · Use thread locks for thread safety
+   · Generate unique execution ID at initialization
+8. Color Scheme:
+   · Header titles: cyan/bold (\033[1;36m)
+   · Table borders: blue/bold (\033[1;34m)
+   · Column headers: cyan (\033[96m)
+   · Values: white (\033[97m)
+   · Section titles: yellow/bold (\033[1;33m)
+
+SAMPLE CONSOLE OUTPUT FORMAT:
+
+I need the exact console output format shown below. The AI must generate code that produces this precise formatting:
+
+```
+====================================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ROBOT FRAMEWORK EXECUTION LISTENER                        ║
+║                      with Log4j-style Console Logging                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        
+====================================================================================================
+EXECUTION INFORMATION:
+--------------------------------------------------------------------------------
+Execution ID                : 2024-01-15_14-30-45
+Start Time                  : 2024-01-15 14:30:45
+Python Version              : 3.9.6
+Robot Framework Version     : 6.1.1
+Platform                    : Linux 5.15.0
+Python Executable           : /usr/bin/python3
+Working Directory           : ubuntu-server
+--------------------------------------------------------------------------------
+
+====================================================================================================
+
+2024-01-15 14:30:45,456 START [13986] SUITE_START [Suite: Test Suite] - Starting suite: Test Suite (id: s1)
+2024-01-15 14:30:45,457 DEBUG [13986] SUITE_METADATA [Suite: Test Suite] - Version: 1.0.0
+2024-01-15 14:30:45,458 INFO [13986] LIBRARY_IMPORT [Suite: Test Suite] - Library imported: Collections | Version: N/A | Scope: GLOBAL
+2024-01-15 14:30:45,460 START [13986] TEST_START [Suite: Test Suite, Test: Test Case 1] - Starting test: Test Case 1 | Tags: smoke
+2024-01-15 14:30:45,461 INFO [13986] LOG_MESSAGE [Suite: Test Suite] - Test message here
+2024-01-15 14:30:45,462 END [13986] TEST_END [Suite: Test Suite, Test: Test Case 1] - Test completed: Test Case 1 | Status: PASS | Elapsed: 0.003s
+----------------------------------------------------------------------------------------------------
+2024-01-15 14:30:45,463 START [13986] TEST_START [Suite: Test Suite, Test: Test Case 2] - Starting test: Test Case 2 | Tags: regression
+2024-01-15 14:30:45,464 INFO [13986] LOG_MESSAGE [Suite: Test Suite] - Another message
+2024-01-15 14:30:45,465 END [13986] TEST_END [Suite: Test Suite, Test: Test Case 2] - Test completed: Test Case 2 | Status: FAIL | Elapsed: 0.002s | Message: Assertion failed
+----------------------------------------------------------------------------------------------------
+2024-01-15 14:30:45,480 END [13986] SUITE_END [Suite: Test Suite] - Suite completed: Test Suite | Status: FAIL | Elapsed: 0.024s | Tests: 5 | Passed: 3 | Failed: 1 | Skipped: 1
+2024-01-15 14:30:45,481 INFO [13986] OUTPUT_FILE - Output file created: output.xml
+2024-01-15 14:30:45,482 INFO [13986] REPORT_FILE - Report file created: report.html
+
+====================================================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         EXECUTION SUMMARY REPORT                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+        
+====================================================================================================
+TEST EXECUTION SUMMARY:
+--------------------------------------------------------------------------------
+Total Tests           : 5
+Passed                : 3
+Failed                : 1
+Skipped               : 1
+Pass Rate             : 60.0%
+Total Time            : 00:00:00.025
+Execution ID          : 2024-01-15_14-30-45
+End Time              : 2024-01-15 14:30:45
+--------------------------------------------------------------------------------
+
+DETAILED TEST RESULTS:
+--------------------------------------------------------------------------------
+Test No. Test Name                              Status       Elapsed Time      Suite                    
+--------------------------------------------------------------------------------
+1        Test Case 1: Verify Basic Operations   PASS         0.003s            Test Suite              
+2        Test Case 2: Verify String Operations  PASS         0.003s            Test Suite              
+3        Test Case 3: List Operations Test      PASS         0.003s            Test Suite              
+4        Test Case 4: Failing Test Example      FAIL         0.003s            Test Suite              
+5        Test Case 5: Skipped Test Example      SKIP         0.002s            Test Suite              
+====================================================================================================
+
+2024-01-15 14:30:45,484 INFO [13986] EXECUTION_COMPLETE - Robot Framework execution completed successfully
+
+====================================================================================================
+```
+
+SAMPLE TEST SUITE TO VERIFY:
+
+Also generate a sample Robot Framework test file named test_suite.robot with:
+
+· 5 test cases (3 PASS, 1 FAIL, 1 SKIP)
+· Different tags (smoke, regression, wip)
+· Multiple libraries (Collections, String)
+· Suite metadata (Version, Author, Environment)
+· Variables and keywords section
+· Test documentation for each
+
+EXECUTION COMMAND:
+
+Provide the command to run: robot --listener Log4jStyleListener test_suite.robot
+
+IMPLEMENTATION NOTES:
+
+· Use threading.Lock() for thread safety in parallel execution
+· Calculate elapsed times using time.time() differences
+· Store test results in a list for final summary
+· Handle all possible Robot Framework events
+· Ensure proper reset of counters between runs
+· Include comprehensive error handling
+· All print statements must use the specified color codes
+· The code must be fully functional without any placeholders
+
+Generate the complete Python code for the listener first, then the sample test suite, and finally show the exact expected console output as above."
+
+---
+
+Key Points to Emphasize When Using This Prompt:
+
+1. Copy this entire text and paste it into the AI tool
+2. Request three deliverables:
+   · Complete Python listener code
+   · Sample Robot test suite (.robot file)
+   · Expected console output sample
+3. Specify the exact formatting (colors, separators, table alignments)
+4. Mention that all ANSI color codes must be included
+5. Emphasize thread safety with threading.Lock()
+6. Note that all Robot Framework events must be handled
+7. The summary table must show test numbers in execution order
+
+This prompt should generate identical code and output to what was shown previously when used with any capable AI coding assistant.
